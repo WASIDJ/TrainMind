@@ -22,7 +22,8 @@ import { fetchBilibiliMeta, fetchYoutubeMeta, transcribeMedia } from "./import-f
 import { buildMuscleLedger, ledgerSignals } from "./muscles.ts"; // 肌群疲劳账本(按部位聚合,纯函数)
 import { buildCheckIn } from "./companion.ts";
 import { buildDailyReport } from "./daily-report.ts";
-import { renderBodyMap } from "./body-map.ts"; // 日常陪伴照面(减重人群预设,规则产出话术)
+import { renderBodyMap } from "./body-map.ts";
+import { classifyMood } from "./companion.ts"; // 日常陪伴照面(减重人群预设,规则产出话术)
 import { exerciseProgress, progressSummary, relationship, nudgeFor, weeklyVolume, type Relationship } from "./progress.ts"; // 进步叙事 + 关系进度
 import { buildProgram, programStatus, recordCompletion, weekOverWeek, type Program } from "./program.ts"; // 多周课程 + 计划/执行分离
 import { agencyChoiceFromSpeech } from "./core.ts";
@@ -661,6 +662,45 @@ const server = createServer(async (req, res) => {
         }),
       });
     }
+    // 数据导出(2026-11-09, owner 要求):"数据资产归用户"。JSON 全量 + 可选删除。
+    if (req.method === "GET" && url.pathname === "/api/export") {
+      const userId = url.searchParams.get("userId") ?? "demo-user";
+      const one = (sql: string) => (db.prepare(sql).all(userId) as Array<{ data_json: string }>).map(r => JSON.parse(r.data_json));
+      const sessions = one("SELECT data_json FROM workout_sessions WHERE user_id = ? ORDER BY created_at");
+      const ids = new Set(sessions.map((s: any) => s.sessionId));
+      const sets = (db.prepare("SELECT data_json FROM set_records").all() as Array<{ data_json: string }>).map(r => JSON.parse(r.data_json)).filter((x: any) => ids.has(x.sessionId));
+      const bundle = {
+        exportedAt: new Date().toISOString(), userId, schemaVersion: 1,
+        note: "这是你自己的训练数据。场次/组记录为本地原始结构，未做二次加工。",
+        sessions, sets,
+        trainingRecords: one("SELECT data_json FROM training_records WHERE user_id = ?"),
+        programs: one("SELECT data_json FROM programs WHERE user_id = ?"),
+        contexts: one("SELECT data_json FROM session_contexts WHERE user_id = ?"),
+        experimentRecords: one("SELECT data_json FROM experiment_records WHERE user_id = ?"),
+      };
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8", "content-disposition": `attachment; filename="trainmind-${userId}-${new Date().toISOString().slice(0, 10)}.json"`, "cache-control": "no-store" });
+      return res.end(JSON.stringify(bundle, null, 2));
+    }
+    // 删除全部数据(2026-11-09):合规要求"能删"。顺序遵守外键依赖。
+    if (req.method === "DELETE" && url.pathname === "/api/export") {
+      const userId = url.searchParams.get("userId") ?? "demo-user";
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const ids = (db.prepare("SELECT id FROM workout_sessions WHERE user_id = ?").all(userId) as Array<{ id: string }>).map(r => r.id);
+        for (const id of ids) {
+          db.prepare("DELETE FROM set_feedbacks WHERE set_record_id IN (SELECT id FROM set_records WHERE json_extract(data_json, '$.sessionId') = ?)").run(id);
+          db.prepare("DELETE FROM set_records WHERE json_extract(data_json, '$.sessionId') = ?").run(id);
+          db.prepare("DELETE FROM interaction_events WHERE session_id = ?").run(id);
+          db.prepare("DELETE FROM adaptation_events WHERE session_id = ?").run(id);
+          db.prepare("DELETE FROM observer_records WHERE session_id = ?").run(id);
+          db.prepare("DELETE FROM workout_exercises WHERE session_id = ?").run(id);
+          db.prepare("DELETE FROM exercise_instances WHERE session_id = ?").run(id);
+        }
+        for (const t of ["workout_sessions", "training_records", "experiment_records", "session_contexts", "programs", "user_training_model_snapshots", "experience_preferences"]) db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(userId);
+        db.exec("COMMIT");
+      } catch (error) { db.exec("ROLLBACK"); throw error; }
+      return json(res, 200, { ok: true, deleted: userId });
+    }
     // 人体示意图(2026-11-09):8 个部位按账本状态上色，直接给 <img> 用。
     if (req.method === "GET" && url.pathname === "/api/body-map.svg") {
       const userId = url.searchParams.get("userId") ?? "demo-user";
@@ -842,6 +882,15 @@ const server = createServer(async (req, res) => {
           ? `${programProposal.weeks} 周 · 每周 ${programProposal.sessionsPerWeek} 次 · 每次 ${programProposal.targetMinutes} 分钟左右，目标是${programProposal.goal}。前两周建立动作模式，第三周加深，最后一周巩固；每一场的剂量仍然按你当天的状态算。要开始就说一声，我把它放进你的课程。`
           : PROGRAM_SLOT_QUESTIONS[missing[0]!]!;
         return json(res, 200, { reply, mode: "program_proposal", programProposal, programSlotsMissing: missing, status: null });
+      }
+      // 心理安抚(2026-11-09):谈情绪时先接住。只在模型已配置时接管，
+      // 未配置时仍走原报错路径（否则会吞掉"请先配置模型"）。
+      if (!session && chatStatus().configured) {
+        const mood = classifyMood(input.message);
+        if (mood !== "neutral") {
+          const comfort = buildCheckIn({ daysSinceLast: null, streakWeeks: 0, totalSessions: 0, lastMessage: input.message });
+          return json(res, 200, { reply: comfort.text, mode: "comfort", mood, status: null });
+        }
       }
       const result = await replyToCoach(session, input.message.trim(), history);
       return json(res, 200, { ...result, status: session?.status ?? null });
