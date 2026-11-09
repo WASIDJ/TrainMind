@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
@@ -20,7 +20,8 @@ import { CUE_TEMPLATES } from "./perception.js"; // 组内听觉感知 v1:时机
 import { detectSource, matchExercise, parseDoseText, assessItem, summarizePlan } from "./import-plan.ts"; // D27:把别人的计划拆成我们的结构
 import { fetchBilibiliMeta, fetchYoutubeMeta, transcribeMedia } from "./import-fetch.ts"; // D27:链接 → 文字（元信息优先，转写兜底）
 import { buildMuscleLedger, ledgerSignals } from "./muscles.ts"; // 肌群疲劳账本(按部位聚合,纯函数)
-import { buildCheckIn } from "./companion.ts"; // 日常陪伴照面(减重人群预设,规则产出话术)
+import { buildCheckIn } from "./companion.ts";
+import { buildDailyReport } from "./daily-report.ts"; // 日常陪伴照面(减重人群预设,规则产出话术)
 import { exerciseProgress, progressSummary, relationship, nudgeFor, weeklyVolume, type Relationship } from "./progress.ts"; // 进步叙事 + 关系进度
 import { buildProgram, programStatus, recordCompletion, weekOverWeek, type Program } from "./program.ts"; // 多周课程 + 计划/执行分离
 import { agencyChoiceFromSpeech } from "./core.ts";
@@ -658,6 +659,37 @@ const server = createServer(async (req, res) => {
           neglectedLabels, trainedToday,
         }),
       });
+    }
+    // 每日日报(2026-11-09):把当天事实压成一页 Markdown。本地生成，不联外部服务。
+    if (req.method === "GET" && url.pathname === "/api/report/daily") {
+      const userId = url.searchParams.get("userId") ?? "demo-user";
+      const localDate = (t: number | string) => new Date(t).toLocaleDateString("sv-SE");
+      const today = localDate(Date.now());
+      const rows = (db.prepare("SELECT data_json FROM workout_sessions WHERE user_id = ? AND status = 'completed'").all(userId) as Array<{ data_json: string }>)
+        .map(r => JSON.parse(r.data_json));
+      const todaySessions = rows.filter(s => localDate(s.runtime?.completedAt ?? s.createdAt) === today)
+        .map(s => ({ sessionId: s.sessionId as string, goal: s.goal as string | undefined, minutes: Math.round((s.runtime?.activeWorkoutMs ?? 0) / 60000), sets: (s.exercises ?? []).reduce((n: number, e: any) => n + (e.completedSets ?? 0), 0), extra: s.kind === "extra" }));
+      const ids = new Set(rows.map(s => s.sessionId));
+      const sets = (db.prepare("SELECT data_json FROM set_records").all() as Array<{ data_json: string }>)
+        .map(r => JSON.parse(r.data_json)).filter((x: any) => ids.has(x.sessionId) && typeof x.completedAt === "string");
+      const ledger = buildMuscleLedger({ sets, musclesByExercise: Object.fromEntries(exercises.map(e => [e.id, e.primaryMuscles])) });
+      const rel = userRelationship(userId);
+      const mon = new Date(); mon.setHours(0, 0, 0, 0); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+      const weekSets = sets.filter((x: any) => Date.parse(x.completedAt) >= mon.getTime());
+      const weekSessions = new Set(weekSets.map((x: any) => x.sessionId)).size;
+      const md = buildDailyReport({
+        userId, date: today, todaySessions,
+        week: { sessions: weekSessions, sets: weekSets.length },
+        streakWeeks: rel.streakWeeks ?? 0, muscles: ledger,
+        headline: null,
+      });
+      if (url.searchParams.get("save") === "1") {
+        const dir = new URL(`../reports/${userId}/`, import.meta.url);
+        await mkdir(dir, { recursive: true });
+        await writeFile(new URL(`${today}.md`, dir), md, "utf8");
+      }
+      res.writeHead(200, { "content-type": "text/markdown; charset=utf-8", "cache-control": "no-store" });
+      return res.end(md);
     }
     // 肌群疲劳账本(2026-11-09):按部位聚合真实完成的组，给出恢复状态。
     // 纯读接口：不改任何状态；排课要不要用这些信号由调用方决定。

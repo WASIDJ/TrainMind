@@ -33,3 +33,6 @@ __pycache__/
 # RepDB 免费档素材(第三方数据集,许可 Term 3 禁止再分发):按需拉取,不入库
 public/media/repdb/
 .cache/
+
+# 用户日报（本地个人数据，不入库）
+reports/
