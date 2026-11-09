@@ -23,6 +23,10 @@ export interface DailyReportInput {
   muscles: MuscleLedgerEntry[];
   /** 最近一次进步叙事（可为空） */
   headline?: string | null;
+  /** 课程里"下一场"的具体安排（有课程时优先说这个，而不是泛泛的"换别的地方"） */
+  planNext?: string | null;
+  /** 人体示意图地址（前端/报告里嵌图用） */
+  bodyMapUrl?: string | null;
 }
 
 const STATE_LABEL: Record<MuscleLedgerEntry["state"], string> = {
@@ -60,6 +64,7 @@ export function buildDailyReport(input: DailyReportInput): string {
   lines.push("");
 
   lines.push("## 肌群状态", "");
+  if (input.bodyMapUrl) lines.push(`![今天练了哪](${input.bodyMapUrl})`, "");
   lines.push("| 部位 | 状态 | 近 7 天 | 距上次 |");
   lines.push("|---|---|---|---|");
   for (const m of input.muscles) {
@@ -71,7 +76,12 @@ export function buildDailyReport(input: DailyReportInput): string {
   const recovering = input.muscles.filter(m => m.state === "just_trained" || m.state === "recovering").map(m => m.label);
   const neglected = input.muscles.filter(m => m.state === "neglected").map(m => m.label);
   lines.push("## 明天可以怎么走", "");
-  if (!trained) {
+  if (input.planNext) {
+    // 有课程时：计划优先，恢复状态只解释"怎么调"，不越权改计划
+    lines.push(`- 下一场（按课程）：${input.planNext}`);
+    if (recovering.length) lines.push(`- 但${recovering.join("、")}还在恢复，这一场我会把相关动作降一档或换掉，其余照计划。`);
+    else lines.push("- 恢复情况允许，按计划走就行，不需要加码。");
+  } else if (!trained) {
     lines.push("- 先动一次就够，量我帮你压小一点。");
   } else if (recovering.length) {
     lines.push(`- ${recovering.join("、")}还在恢复，明天换别的地方，或者干脆休息。`);

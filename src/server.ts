@@ -21,7 +21,8 @@ import { detectSource, matchExercise, parseDoseText, assessItem, summarizePlan }
 import { fetchBilibiliMeta, fetchYoutubeMeta, transcribeMedia } from "./import-fetch.ts"; // D27:链接 → 文字（元信息优先，转写兜底）
 import { buildMuscleLedger, ledgerSignals } from "./muscles.ts"; // 肌群疲劳账本(按部位聚合,纯函数)
 import { buildCheckIn } from "./companion.ts";
-import { buildDailyReport } from "./daily-report.ts"; // 日常陪伴照面(减重人群预设,规则产出话术)
+import { buildDailyReport } from "./daily-report.ts";
+import { renderBodyMap } from "./body-map.ts"; // 日常陪伴照面(减重人群预设,规则产出话术)
 import { exerciseProgress, progressSummary, relationship, nudgeFor, weeklyVolume, type Relationship } from "./progress.ts"; // 进步叙事 + 关系进度
 import { buildProgram, programStatus, recordCompletion, weekOverWeek, type Program } from "./program.ts"; // 多周课程 + 计划/执行分离
 import { agencyChoiceFromSpeech } from "./core.ts";
@@ -660,6 +661,16 @@ const server = createServer(async (req, res) => {
         }),
       });
     }
+    // 人体示意图(2026-11-09):8 个部位按账本状态上色，直接给 <img> 用。
+    if (req.method === "GET" && url.pathname === "/api/body-map.svg") {
+      const userId = url.searchParams.get("userId") ?? "demo-user";
+      const ids = new Set((db.prepare("SELECT id FROM workout_sessions WHERE user_id = ?").all(userId) as Array<{ id: string }>).map(r => r.id));
+      const sets = (db.prepare("SELECT data_json FROM set_records").all() as Array<{ data_json: string }>)
+        .map(r => JSON.parse(r.data_json)).filter((x: any) => ids.has(x.sessionId) && typeof x.completedAt === "string");
+      const ledger = buildMuscleLedger({ sets, musclesByExercise: Object.fromEntries(exercises.map(e => [e.id, e.primaryMuscles])) });
+      res.writeHead(200, { "content-type": "image/svg+xml; charset=utf-8", "cache-control": "no-store" });
+      return res.end(renderBodyMap(ledger, { width: Number(url.searchParams.get("w")) || 240 }));
+    }
     // 每日日报(2026-11-09):把当天事实压成一页 Markdown。本地生成，不联外部服务。
     if (req.method === "GET" && url.pathname === "/api/report/daily") {
       const userId = url.searchParams.get("userId") ?? "demo-user";
@@ -682,6 +693,8 @@ const server = createServer(async (req, res) => {
         week: { sessions: weekSessions, sets: weekSets.length },
         streakWeeks: rel.streakWeeks ?? 0, muscles: ledger,
         headline: null,
+        planNext: (() => { try { const prog = activeProgram(userId); if (!prog) return null; const st = programStatus(prog); return st.nextSession ? `${st.text} · ${st.nextSession.title}` : null; } catch { return null; } })(),
+        bodyMapUrl: `/api/body-map.svg?userId=${encodeURIComponent(userId)}`,
       });
       if (url.searchParams.get("save") === "1") {
         const dir = new URL(`../reports/${userId}/`, import.meta.url);
