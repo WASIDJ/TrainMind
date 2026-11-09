@@ -973,6 +973,14 @@ async function applyHomeCta(){
       link.onclick=()=>home(true);
       kicker.after(link);
     }
+    // 平时的一句照面(2026-11-09):训练之外也在,但不催不考核。文案由规则产出(减重人群预设)。
+    const nudge=document.querySelector('#nudge');
+    if(nudge){
+      api('/api/companion?userId='+encodeURIComponent(userId)).then(d=>{
+        if(!nudge.isConnected||!d.checkIn)return;
+        nudge.innerHTML='<div class="tm-note"><strong>教练说</strong><p>'+esc(d.checkIn.text)+'</p></div>';
+      }).catch(()=>{});
+    }
   }catch{}
 }
   const homeMic=document.querySelector('#home-mic');

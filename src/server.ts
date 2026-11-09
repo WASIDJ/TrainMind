@@ -20,6 +20,7 @@ import { CUE_TEMPLATES } from "./perception.js"; // 组内听觉感知 v1:时机
 import { detectSource, matchExercise, parseDoseText, assessItem, summarizePlan } from "./import-plan.ts"; // D27:把别人的计划拆成我们的结构
 import { fetchBilibiliMeta, fetchYoutubeMeta, transcribeMedia } from "./import-fetch.ts"; // D27:链接 → 文字（元信息优先，转写兜底）
 import { buildMuscleLedger, ledgerSignals } from "./muscles.ts"; // 肌群疲劳账本(按部位聚合,纯函数)
+import { buildCheckIn } from "./companion.ts"; // 日常陪伴照面(减重人群预设,规则产出话术)
 import { exerciseProgress, progressSummary, relationship, nudgeFor, weeklyVolume, type Relationship } from "./progress.ts"; // 进步叙事 + 关系进度
 import { buildProgram, programStatus, recordCompletion, weekOverWeek, type Program } from "./program.ts"; // 多周课程 + 计划/执行分离
 import { agencyChoiceFromSpeech } from "./core.ts";
@@ -633,6 +634,30 @@ const server = createServer(async (req, res) => {
       const ids = new Set(sessions.map(x => x.sessionId)), sets = db.prepare("SELECT data_json FROM set_records").all().map((x: any) => JSON.parse(x.data_json) as SetRecord).filter(x => ids.has(x.sessionId)), trainingRecords = loadTrainingRecords(userId, ids);
       const context = db.prepare("SELECT data_json FROM session_contexts WHERE user_id = ? ORDER BY created_at DESC LIMIT 1").get(userId) as { data_json: string } | undefined;
       return json(res, 200, { userId, experiencePreference: row ? JSON.parse(row.data_json) : null, trainingOverview: { sessions: sessions.length, sets: sets.length }, trainingModel: buildUserTrainingModel(userId, { sessions, sets, trainingRecords }), latestContext: context ? JSON.parse(context.data_json) : null });
+    }
+    // 日常陪伴照面(2026-11-09):训练之外"它先说一句"。只读，话术由规则产出。
+    if (req.method === "GET" && url.pathname === "/api/companion") {
+      const userId = url.searchParams.get("userId") ?? "demo-user";
+      const rows = (db.prepare("SELECT data_json FROM workout_sessions WHERE user_id = ? AND status = 'completed'").all(userId) as Array<{ data_json: string }>)
+        .map(r => JSON.parse(r.data_json));
+      const done = rows.map(s => (s.runtime?.completedAt ?? s.createdAt) as string).filter(Boolean).sort();
+      const last = done.at(-1);
+      const days = last ? Math.floor((Date.now() - Date.parse(last)) / 86_400_000) : null;
+      const rel = userRelationship(userId);
+      const ids = new Set((db.prepare("SELECT id FROM workout_sessions WHERE user_id = ?").all(userId) as Array<{ id: string }>).map(r => r.id));
+      const setsForLedger = (db.prepare("SELECT data_json FROM set_records").all() as Array<{ data_json: string }>)
+        .map(r => JSON.parse(r.data_json)).filter((s: any) => ids.has(s.sessionId) && typeof s.completedAt === "string");
+      const ledger = buildMuscleLedger({ sets: setsForLedger, musclesByExercise: Object.fromEntries(exercises.map(e => [e.id, e.primaryMuscles])) });
+      const neglectedLabels = ledger.filter(x => x.state === "neglected").map(x => x.label);
+      const trainedToday = last ? new Date(last).toDateString() === new Date().toDateString() : false;
+      return json(res, 200, {
+        userId,
+        checkIn: buildCheckIn({
+          persona: (url.searchParams.get("persona") as "fat_loss" | "general") ?? "fat_loss",
+          daysSinceLast: days, streakWeeks: rel.streakWeeks ?? 0, totalSessions: done.length,
+          neglectedLabels, trainedToday,
+        }),
+      });
     }
     // 肌群疲劳账本(2026-11-09):按部位聚合真实完成的组，给出恢复状态。
     // 纯读接口：不改任何状态；排课要不要用这些信号由调用方决定。
