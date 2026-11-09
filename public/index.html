@@ -1,10 +1,8 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>TrainMind</title><link rel="stylesheet" href="/trainmind-ui.css"><link rel="stylesheet" href="/visual-design.css"><style>
-/* RepDB 免费档:起始帧/顶点帧交替,做"抽帧动图"效果(真循环动画属付费档) */
+/* RepDB 免费档:先只显示静态起始帧(owner 决定"先用静止的")。
+   顶点帧素材已下载,后续要交替/换付费动画时改这里 + workoutIcon 即可。 */
 .tm-anim{position:relative;display:block;width:100%;height:100%;min-height:44px;border-radius:12px;overflow:hidden;background:#efe7dd}
 .tm-anim img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.tm-anim img.peak{animation:tmswap 1.6s steps(1,end) infinite}
-@keyframes tmswap{0%,54%{opacity:0}55%,100%{opacity:1}}
-@media (prefers-reduced-motion: reduce){.tm-anim img.peak{animation:none;opacity:0}}
 </style></head><body>
 <div class="shell">
   <header class="appbar"><div class="brand"><span class="brandmark" aria-hidden="true"><svg viewBox="0 0 26 26"><path d="M15 2 5 15h7l-1 9 10-13h-7z" fill="currentColor"/></svg></span><span>TrainMind<small>训练工作室</small></span></div><div class="appbar-end"><span class="appbar-date"></span><button class="avatar" aria-label="切换训练者 ID"></button></div></header>
@@ -519,9 +517,10 @@ const coachAssets={home:['d5f35',125],intent:['39cd6',90],plan:['08af3',85],play
 function designCoach(kind,message){const [asset,size]=coachAssets[kind];return '<div class="tm-coach"><img src="/tm-'+asset+'.svg" width="'+size+'" height="'+size+'" alt="TrainMind 云朵教练"><div class="tm-coach-copy"><small>TrainMind 教练</small><strong>'+esc(message)+'</strong></div></div>'}
 function designMetric(value,label){return '<div class="tm-metric"><strong>'+esc(value)+'</strong><small>'+esc(label)+'</small></div>'}
 function workoutIcon(ex){
-  // RepDB 免费档:两帧静帧(起/顶)交替,视觉上像抽帧动图。没有素材的动作退回矢量图标。
+  // RepDB 免费档:先用**静态起始帧**(owner 2026-11-09 决定"先用静止的")。
+  // 顶点帧已一并拉取,将来要换成交替/付费动画时直接改这里即可。
   const id=ex&&(ex.exerciseId||ex.id);
-  if(ex&&ex.attributionRequired&&id)return '<span class="tm-anim" aria-hidden="true"><img src="/media/repdb/'+esc(id)+'-start.webp" alt="" loading="lazy" onerror="this.replaceWith()"><img class="peak" src="/media/repdb/'+esc(id)+'-peak.webp" alt="" loading="lazy" onerror="this.remove()"></span>';
+  if(ex&&ex.attributionRequired&&id)return '<span class="tm-anim" aria-hidden="true"><img src="/media/repdb/'+esc(id)+'-start.webp" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'"></span>';
   return '<span class="workout-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M7 12h10M7 7v10M17 7v10M3 9v6M21 9v6M3 12h4m10 0h4"/></svg></span>'}
 const goalNames={back_strength:'背部力量',chest_strength:'胸部力量',upper_body:'上肢力量',lower_body:'下肢力量',general_fitness:'全身力量',mobility:'轻度恢复'};
 async function pauseLifecycleSession(snapshot){
