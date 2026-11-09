@@ -223,3 +223,21 @@
 原始数据 80 条 `contraindicationTags` 全空 → 先按动作模式推导补上（`core.ts` 的 `PATTERN_CONTRAINDICATIONS`）：squat/lunge→`knee_pain`、hinge/hip_extension→`low_back_pain`、push/pull→`shoulder_pain`。自研动作仍用手写标签。新增回归测试 `RepDB 动作补齐禁忌标签，自研动作不受影响`。
 
 **第 2 步（健身房放开 RepDB）试过但已撤回**：在 `rank()` 里给 gym 场景的 RepDB 动作 -5 权，覆盖率确实从 0–1/6 涨到 4/6、5/8、6/9，但**一次跑崩 20+ 项既有断言**（剂量演进链、agency 三选一、器械递增都跟着变）。演示前不做这种全局排序改动。若要继续，得用更窄的口子（例如只在"自研没有该模式+器械组合"时让位，或在替代候选里加权），而不是全局加权。
+
+## 十四、肌群疲劳账本（2026-11-09，D29）
+
+**动机**：这是上一轮复核和 Fitbod 对照都指向的同一个缺口——我们只有"整场自述"的 `RecoveryState`，没有任何按肌群的累计。后果是"今天腿有点酸"只能拼一句提示文案，排课照样排深蹲。
+
+**落地**（`src/muscles.ts`，纯函数）：
+
+- 把两套肌群命名统一到 8 个部位：自研的 `legs/chest/back` 与 RepDB 的 `quadriceps/pectoralis_major/latissimus_dorsi` 都映射进 `legs/chest/back/shoulders/arms/core/glutes/calves`
+- 按部位聚合：近 7 天组数、近 28 天组数、**实测（counted/reported）与推定（assumed）分开计**
+- 恢复窗口：腿 72h / 臀背胸 48h / 肩臂 36h / 核心小腿 24h，训练量越大窗口越长（上限 1.5 倍）
+- 状态：`just_trained` / `recovering` / `recovered` / `neglected`（≥14 天）/ `no_record`，每个状态带一句可直接展示的话
+- `GET /api/muscles?userId=` 只读；记录页底部渲染「肌群状态」列表
+
+**验证**：8 项单测（命名空间映射、时间衰减、被落下、assumed 分离、一动作喂两部位、无记录不假装、未来时间戳不计）；`/api/muscles` 实测 demo-investor 返回「腿：刚练过（4 小时前）近 7 天 9 组」；浏览器记录页渲染 8 行。
+
+**未做**：体图（MuscleMap MIT 路径）等视觉方向确认后再接；把账本接进排课过滤（"说腿酸仍排深蹲"那个漏洞）也还没做——那是下一步。
+
+**测试抖动（既有问题，非本次引入）**：`test/frontend.test.ts:77` 用 `freePort()` 探端口后 spawn 服务，存在 TOCTOU 竞态；并行跑时偶发 `Model integration server did not start`。本轮 8 次全量跑里命中 2 次，重跑即绿。

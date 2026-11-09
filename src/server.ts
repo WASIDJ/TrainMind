@@ -19,6 +19,7 @@ import { applyLateFeedback } from "./core.ts"; // D17:组后补充反馈(不报�
 import { CUE_TEMPLATES } from "./perception.js"; // 组内听觉感知 v1:时机引擎话术锚点(纯 JS,前后端共用)
 import { detectSource, matchExercise, parseDoseText, assessItem, summarizePlan } from "./import-plan.ts"; // D27:把别人的计划拆成我们的结构
 import { fetchBilibiliMeta, fetchYoutubeMeta, transcribeMedia } from "./import-fetch.ts"; // D27:链接 → 文字（元信息优先，转写兜底）
+import { buildMuscleLedger, ledgerSignals } from "./muscles.ts"; // 肌群疲劳账本(按部位聚合,纯函数)
 import { exerciseProgress, progressSummary, relationship, nudgeFor, weeklyVolume, type Relationship } from "./progress.ts"; // 进步叙事 + 关系进度
 import { buildProgram, programStatus, recordCompletion, weekOverWeek, type Program } from "./program.ts"; // 多周课程 + 计划/执行分离
 import { agencyChoiceFromSpeech } from "./core.ts";
@@ -632,6 +633,18 @@ const server = createServer(async (req, res) => {
       const ids = new Set(sessions.map(x => x.sessionId)), sets = db.prepare("SELECT data_json FROM set_records").all().map((x: any) => JSON.parse(x.data_json) as SetRecord).filter(x => ids.has(x.sessionId)), trainingRecords = loadTrainingRecords(userId, ids);
       const context = db.prepare("SELECT data_json FROM session_contexts WHERE user_id = ? ORDER BY created_at DESC LIMIT 1").get(userId) as { data_json: string } | undefined;
       return json(res, 200, { userId, experiencePreference: row ? JSON.parse(row.data_json) : null, trainingOverview: { sessions: sessions.length, sets: sets.length }, trainingModel: buildUserTrainingModel(userId, { sessions, sets, trainingRecords }), latestContext: context ? JSON.parse(context.data_json) : null });
+    }
+    // 肌群疲劳账本(2026-11-09):按部位聚合真实完成的组，给出恢复状态。
+    // 纯读接口：不改任何状态；排课要不要用这些信号由调用方决定。
+    if (req.method === "GET" && url.pathname === "/api/muscles") {
+      const userId = url.searchParams.get("userId") ?? "demo-user";
+      const ids = new Set((db.prepare("SELECT id FROM workout_sessions WHERE user_id = ?").all(userId) as Array<{ id: string }>).map(r => r.id));
+      const sets = (db.prepare("SELECT data_json FROM set_records").all() as Array<{ data_json: string }>)
+        .map(r => JSON.parse(r.data_json))
+        .filter((s: any) => ids.has(s.sessionId) && typeof s.completedAt === "string");
+      const musclesByExercise = Object.fromEntries(exercises.map(e => [e.id, e.primaryMuscles]));
+      const ledger = buildMuscleLedger({ sets, musclesByExercise });
+      return json(res, 200, { userId, muscles: ledger, signals: ledgerSignals(ledger) });
     }
     if (req.method === "GET" && url.pathname === "/api/progress") {
       // 进步叙事 + 关系进度 + 回归钩子 + 课程章节:一次给全端(记录页 / 首页 / 叙事记忆共用同一口径)

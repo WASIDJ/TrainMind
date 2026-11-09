@@ -795,6 +795,23 @@ async function profilePage(){
     document.querySelector('#profile-coach-settings').onclick=()=>coachSettings('profile');document.querySelector('#switch-user').onclick=()=>document.querySelector('.avatar').click();
   }catch(error){if(screen.isConnected)screen.insertAdjacentHTML('beforeend','<div class="error">'+esc(error.message)+'</div>')}
 }
+// 肌群状态(2026-11-09):账本只读展示。颜色只表达"能不能接着练",不做医疗判断。
+async function renderMuscleLedger(screen){
+  if(!screen)return;
+  try{
+    const d=await api('/api/muscles?userId='+encodeURIComponent(userId));
+    if(!screen.isConnected||!Array.isArray(d.muscles))return;
+    const tone={just_trained:'#ffb4a2',recovering:'#ffd9c9',recovered:'#b7dfb7',neglected:'#c9b8e8',no_record:'rgba(0,0,0,.12)'};
+    const rows=d.muscles.map(m=>'<div style="display:flex;align-items:center;gap:8px;padding:5px 0"><span style="width:10px;height:10px;border-radius:50%;flex:0 0 auto;background:'+(tone[m.state]||'#ddd')+'"></span><span style="width:44px">'+esc(m.label)+'</span><small style="flex:1;opacity:.72">'+esc(m.text)+'</small><small style="opacity:.5">近7天 '+m.sets7d+' 组</small></div>').join('');
+    const neg=((d.signals&&d.signals.neglected)||[]).map(g=>(d.muscles.find(x=>x.group===g)||{}).label||g);
+    const box=document.createElement('section');box.className='tm-note';box.id='muscle-ledger';
+    box.innerHTML='<strong>肌群状态</strong>'+rows
+      +(neg.length?'<p class="home-suggestion" style="margin-top:6px">被落下：'+esc(neg.join('、'))+'（两周以上没练）</p>':'')
+      +'<p class="home-suggestion" style="margin-top:6px">只按你真实完成的组算。红=刚练完，橙=恢复中，绿=已恢复，紫=太久没练，灰=没记录。</p>';
+    screen.appendChild(box);
+  }catch{}
+}
+
 // D27（2026-11-09，owner 要求）：导入别人的计划（B站/YouTube 链接或直接贴文字）。
 // 只做"读懂 + 判断适不适合"，绝不替用户决定练什么；判定与剂量建议全部来自规则层。
 async function importPage(){
@@ -833,6 +850,7 @@ async function recordsPage(){
       list.querySelectorAll('[data-record]').forEach(b=>b.onclick=()=>recordDetail(sessions.find(x=>x.workout.sessionId===b.dataset.record)));
     };
     draw('all');document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-filter]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b))});draw(b.dataset.filter)});
+    void renderMuscleLedger(screen);
     document.querySelector('#latest-record').onclick=()=>recordDetail(sessions[0]);document.querySelector('#view-progress').onclick=()=>progressPage(sessions);
   }catch(error){if(screen.isConnected)screen.insertAdjacentHTML('beforeend','<div class="error">'+esc(error.message)+'</div>')}
 }
