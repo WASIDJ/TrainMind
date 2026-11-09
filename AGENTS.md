@@ -12,8 +12,23 @@
 3. 产品级裁决写进 `../TrainMind-智能性重设计提案.md`，用 D 编号（D14/D16-B/D17…）
 4. 竞品/开源对照写进 `../reverse-lab/`
 5. 真机证据（截图 + UI 树）落 `device-acceptance/<时间戳>/`，日志里引用目录名
+6. **每次实质改动后 `git commit`**（2026-11-09 起仓库才存在）：跑通测试 → 更新 PROGRESS/journal → 提交。消息写清"改了什么、为什么"，不写"update"。
 
 > 判断标准：**一个没参与今天对话的人，只看仓库能不能复原"为什么这么做"**。不能，就是没留档。
+
+## 版本控制
+
+仓库就是 `TrainMind/` 本身（2026-11-09 `git init`）。之前从未进过 git，今天的基线提交是 `3c9e6c4`。
+
+```bash
+git status --short          # 动手前后各看一次
+git add -p                  # 只挑自己这次改的，别把别人的改动卷进来
+git commit -F -             # 多行消息：改了什么 + 为什么 + 验证方式
+```
+
+- **入库**：`src/` `public/` `test/` `tools/` `knowledge/` `docs/` 与根目录脚本/文档
+- **永不入库**（`.gitignore` 已挡）：活库 `trainmind.db*`、备份 `*.bak*`、真机验收 `device-acceptance/`、密钥 `*.env`、`__pycache__`、外部数据集 clone `test/repdb-source/`
+- 活库含真人训练与语音转写，**一旦提交进历史就无法撤回**——新增忽略规则时先确认不是数据文件
 
 ## 启动（别用裸 node）
 
@@ -39,5 +54,5 @@ npm test                                    # 全量：node --test test/（递�
 node tools/repair-durations.ts              # 数据修复（dry-run，加 TRAINMIND_APPLY=1 才写）
 ```
 
-当前基线：**268 项 / 267 过 / 1 skip / 0 败**。提交前必须连跑两次确认无抖动。
+当前基线：**311 项 / 310 过 / 1 skip / 0 败**（2026-11-09 实跑）。提交前必须连跑两次确认无抖动。
 报数必须报全量并写明命令——手工列测试文件会漏，制造假绿（2026-11-06 踩过）。

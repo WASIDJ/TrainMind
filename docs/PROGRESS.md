@@ -107,3 +107,15 @@
 演示库现状：`demo-investor` 6 场 / 18 组；`/api/experiment?dataOrigin=human` 18 条（探针已隔离在 demo）。
 
 **注意**：`tools/demo-verify.mjs` 里"说「轻松」调下一组剂量"一项按 `core.applyLateFeedback` 的规则判定——该动作**还有后续组**才改剂量，做完最后一组时不动（曾因断言写死"必须变"而误报一次红）。
+
+## 八、版本控制（2026-11-09 首次入库）
+
+**此前项目从未进过 git**，所有改动只能靠 `trainmind.db.bak-*` 之类的文件快照回滚——今天一整轮（46 条审计 + 三条裁决 + 演示包）都没有历史。
+
+现在的约定：
+
+- 仓库 = `TrainMind/` 本身；基线提交 `3c9e6c4`（209 个文件，28208 行）
+- **每次实质改动后提交**：跑通测试 → 更新 PROGRESS/journal → commit（见 `AGENTS.md`「版本控制」）
+- 不进库：活库 `trainmind.db*`、备份 `*.bak*`、`device-acceptance/`、`*.env`、`__pycache__`、`test/repdb-source/`（外部数据集 clone，按需拉）
+
+入库时踩到一个结构性坑：`test/repdb-source/` 是上游 `RepDB/exercise-dataset` 的 clone，被当作 gitlink（`160000` 模式）收进来但没有 `.gitmodules`，clone 下来会是个空目录。代码实际只读 `knowledge/exercises.repdb.json`，于是把它移出仓库并在 `.gitignore` 里记下来源 URL。
