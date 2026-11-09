@@ -46,7 +46,7 @@ export interface CheckIn {
 export function classifyMood(text: string | undefined | null): MoodSignal {
   const s = String(text ?? "");
   if (!s.trim()) return "neutral";
-  if (/白练|没用|失败|减不下去|我不行|管不住嘴|又吃了|又胖|恨自己|恶心自己/.test(s)) return "self_blame";
+  if (/白练|没用|失败|减不下去|减不下来|瘦不下来|我不行|管不住嘴|又吃|吃多了|又胖|恨自己|恶心自己/.test(s)) return "self_blame";
   if (/平台|瓶颈|不掉秤|卡住|反弹|一直没变/.test(s)) return "plateau";
   if (/放弃|不想练了|坚持不下去|太难了|撑不住/.test(s)) return "want_quit";
   if (/焦虑|烦躁|睡不着|心慌|压力大|emo/.test(s)) return "anxious";
