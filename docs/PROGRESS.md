@@ -193,3 +193,25 @@
 **验证**：实测加练场次练完 → `status=completed`、`/api/history` 里 `kind=extra`、`training_record` 自动生成；新增 `test/extra-session.test.ts`（普通场次不被误标 / 加练不被拒 / 不挂课程 / 落库带标记）。
 
 **未验证**：结算页按钮的真实点击链路（需要完整练完一场才能到那一屏），当前只做了语法与结构检查 + 接口层实测。
+
+## 十三、RepDB 素材接入（2026-11-09）
+
+**起因**：owner 看到官网全是动图，问"我们的署名写了，但素材到底用没用"。核实结果是——**数据用了 80 个动作，素材一张都没用**（JSON 里 `media` 为空，仓库里也只有 JSON 没有图片）。
+
+**许可核实（决定了能做什么）**：
+
+| 素材 | 档位 | 能否用 |
+|---|---|---|
+| 动作数据 + 每动作 2 张 512px 静帧（start/peak） | Free | ✅ 免费商用、App 内使用、需署名 |
+| 循环动画（官网演示那种） | Standard 付费 | ❌ 需升级；`premium-samples/` 样品仅限评估 |
+
+**落地**：
+
+- `tools/fetch-repdb-media.ts`：按需下载免费包（29.6MB）→ 只解出动作池用到的 → `public/media/repdb/`（**不入 git**，许可 Term 3 禁止再分发）；实测 147 张、覆盖 80/80 个动作、2.6MB
+- 服务端加 `/media/repdb/<id>-{start,peak}.webp` 静态路由（带路径穿越防护）
+- 前端 `workoutIcon(ex)`：RepDB 动作渲染两帧交替（`1.6s steps(1,end)`），无素材动作退回矢量图标；`prefers-reduced-motion` 时不动
+- 计划页与记录详情都接上
+
+**实测**：浏览器打开计划页，`.tm-anim` 渲染出 2 张 512×512 且 `naturalWidth>0`（起始帧 + 顶点帧）。
+
+**已知限制**：覆盖率取决于 RepDB 动作被选中的比例——实测这类计划 6 个动作里只有 1 个来自 RepDB，所以看起来仍偏空。**要不要把 RepDB 提为动作主力（A 方案）仍未决**，且若提为主力需先补它的 `contraindicationTags`（现在为空，意味着永远不会因膝/腰限制被排除）。

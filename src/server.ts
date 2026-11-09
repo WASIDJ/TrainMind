@@ -490,6 +490,10 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname.startsWith("/coach-media/") && coachMedia.has(url.pathname.slice("/coach-media/".length))) {
       return sendFile(res, "image/jpeg", new URL(`../public${url.pathname}`, import.meta.url), "public, max-age=86400");
     }
+    // RepDB 免费档静帧(2026-11-09):只允许这个目录 + 这个文件名形态,避免路径穿越
+    if (req.method === "GET" && /^\/media\/repdb\/[a-z0-9][a-z0-9-]*\.webp$/.test(url.pathname)) {
+      return sendFile(res, "image/webp", new URL(`../public${url.pathname}`, import.meta.url), "public, max-age=86400");
+    }
     if (req.method === "GET" && url.pathname === "/trainmind-ui.css") return sendFile(res, "text/css; charset=utf-8", new URL("../public/trainmind-ui.css", import.meta.url), "no-cache");
     if (req.method === "GET" && svgAssets.has(url.pathname.slice(1))) return sendFile(res, "image/svg+xml", new URL(`../public/${url.pathname.slice(1)}`, import.meta.url), "public, max-age=86400");
     if (req.method === "GET" && (url.pathname === "/" || (url.pathname === "/experiment" && devPageEnabled))) return sendFile(res, "text/html; charset=utf-8", htmlPath);

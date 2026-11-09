@@ -29,3 +29,7 @@ __pycache__/
 # 代码只读 knowledge/exercises.repdb.json;需要原始数据时手动:
 #   git clone https://github.com/RepDB/exercise-dataset.git test/repdb-source
 /test/repdb-source/
+
+# RepDB 免费档素材(第三方数据集,许可 Term 3 禁止再分发):按需拉取,不入库
+public/media/repdb/
+.cache/
