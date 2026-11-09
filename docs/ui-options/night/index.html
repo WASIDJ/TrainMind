@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>TrainMind · 夜场</title>
+<link rel="stylesheet" href="night.css">
+<script src="night.js" type="module"></script>
+</head>
+<body>
+<div class="review">
+  <aside class="rail">
+    <a href="../">← A/B/C 对比</a>
+    <p class="mono edition">TRAINMIND / A</p>
+    <h1>夜场<span>.</span></h1>
+    <p class="rail-copy">训练界面评审 · 示例数据</p>
+    <div class="review-controls">
+      <label for="jumps">评审页面</label><select id="jumps"></select>
+      <label for="view-state">页面状态</label><select id="view-state"><option value="normal">正常</option><option value="loading">加载骨架</option><option value="empty">空态</option><option value="error">网络错误</option><option value="resume">恢复训练（首页）</option></select>
+      <form id="voice-demo"><label for="utterance">模拟语音指令</label><div><input id="utterance" placeholder="例如：做完了"><button>发送</button></div><p id="voice-result" role="status">用文字模拟识别结果。</p></form>
+    </div>
+  </aside>
+  <main class="device" aria-label="TrainMind 夜场手机预览">
+    <div id="screen"></div>
+    <nav id="tabs" aria-label="应用导航"></nav>
+  </main>
+</div>
+</body>
+</html>

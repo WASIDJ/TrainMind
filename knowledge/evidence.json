@@ -1,0 +1,184 @@
+{
+  "rules": [
+    {
+      "rule_id": "session_movement_coverage_v0",
+      "description": "Full-body sessions cover squat, push, and core patterns before adding other work.",
+      "target_population": "Adults without reported active pain requesting general fitness",
+      "source": "https://www.who.int/publications-detail-redirect/9789240015128",
+      "evidence_type": "external_evidence",
+      "version": "WHO 2020; TrainMind mapping v0",
+      "implementation_note": "WHO supports major-muscle-group strengthening. The exact three-pattern choice and per-session order are TrainMind design decisions, not quoted WHO prescriptions."
+    },
+    {
+      "rule_id": "progression_requires_history_v0",
+      "description": "Increase load only after repeated successful sets; adjust to training status.",
+      "target_population": "Healthy adults performing resistance training",
+      "source": "https://pubmed.ncbi.nlm.nih.gov/19204579/",
+      "evidence_type": "external_evidence",
+      "version": "ACSM 2009; TrainMind implementation v0",
+      "implementation_note": "The code's three-set threshold is a conservative product heuristic, not an ACSM quoted value. Review against the 2026 position stand before treating as evidence-based."
+    },
+    {
+      "rule_id": "duration_recipe_v0",
+      "description": "A target duration is filled with distinct exercise and timed conditioning or mobility blocks, not unlimited sets of one exercise.",
+      "target_population": "Adults requesting a time-bounded general fitness session",
+      "source": "TrainMind product requirement, 2026-09-24",
+      "evidence_type": "product_heuristic",
+      "version": "v0",
+      "implementation_note": "Block shares and timing are product estimates; measure real completion times before making physiological claims."
+    },
+    {
+      "rule_id": "target_rir_v0",
+      "description": "Use a default target of approximately two repetitions in reserve for ordinary strength sets.",
+      "target_population": "Healthy adults in a general fitness session",
+      "source": "https://acsm.org/science-spotlight-acsm-releases-new-position-stand-on-resistance-training/",
+      "evidence_type": "product_heuristic",
+      "version": "TrainMind v0, informed by ACSM 2026",
+      "implementation_note": "RIR 2 is a TrainMind default, not an exact ACSM quotation. It must yield to pain, fatigue, and user correction."
+    },
+    {
+      "rule_id": "set_range_v0",
+      "description": "Start most exercises with one to three sets according to duration and recent performance.",
+      "target_population": "Healthy adults beginning or continuing general resistance training",
+      "source": "https://www.acsm.org/wp-content/uploads/2026/03/Resistance-Training-Position-Stand-infographic.pdf",
+      "evidence_type": "external_evidence",
+      "version": "ACSM 2026 infographic; TrainMind mapping v0",
+      "implementation_note": "ACSM illustrates two to three sets for strength. A one-set calibration in TrainMind is an implementation choice and should be evaluated separately."
+    },
+    {
+      "rule_id": "weekly_frequency_v0",
+      "description": "Strengthening major muscle groups on two or more days per week is a long-term public-health reference, not a command for today's session.",
+      "target_population": "Adults without conditions requiring individualized medical advice",
+      "source": "https://www.who.int/publications-detail-redirect/9789240015128",
+      "evidence_type": "external_evidence",
+      "version": "WHO 2020",
+      "implementation_note": "The current app does not prescribe a weekly schedule; this rule is registry context for future review only."
+    },
+    {
+      "rule_id": "minimum_evidence_for_progression_v1",
+      "description": "Require three successful exposure records before considering progression.",
+      "target_population": "TrainMind users with recorded workouts",
+      "source": "TrainMind product heuristic",
+      "evidence_type": "product_heuristic",
+      "version": "v1",
+      "implementation_note": "Three records is a product threshold; no direct evidence claim is made for this exact number."
+    },
+    {
+      "rule_id": "recent_pain_window_v1",
+      "description": "Treat pain reports in the previous 30 days as recent for substitution decisions.",
+      "target_population": "TrainMind users reporting exercise-related pain",
+      "source": "TrainMind product heuristic",
+      "evidence_type": "product_heuristic",
+      "version": "v1",
+      "implementation_note": "The 30-day window is a product heuristic, not a clinical definition."
+    },
+    {
+      "rule_id": "repdb_normalization_v1",
+      "description": "RepDB source fields are mapped to the TrainMind exercise schema; absent prescription values remain unknown.",
+      "target_population": "RepDB Free candidate exercises",
+      "source": "https://github.com/RepDB/exercise-dataset",
+      "evidence_type": "product_heuristic",
+      "version": "9ed9357f09c7566ea0256c57ebd6374ebb8b575e",
+      "implementation_note": "Movement pattern, localization, review cues and relations are curated product mappings and are not source claims."
+    },
+    {
+      "rule_id": "session_recipe_timing_v1",
+      "description": "Use warm-up, main, secondary, accessory, timed and cooldown blocks to fill target session duration.",
+      "target_population": "Users requesting a time-bounded training session",
+      "source": "TrainMind product heuristic",
+      "evidence_type": "product_heuristic",
+      "version": "v1",
+      "implementation_note": "Block timing and shares are engineering estimates; validate against real completion logs."
+    },
+    {
+      "rule_id": "acsm-strength-load-sets-2026",
+      "description": "For healthy adults, strength was enhanced by heavier loads (at least 80% 1RM) performed for 2–3 sets.",
+      "target_population": "healthy adults; strength outcome",
+      "source": "https://doi.org/10.1249/MSS.0000000000003897",
+      "evidence_type": "external_evidence",
+      "version": "training-principles-v1",
+      "implementation_note": "TrainMind uses the set range when the goal is strength. It does not invent an 1RM or convert an unknown load to 80%."
+    },
+    {
+      "rule_id": "acsm-hypertrophy-weekly-volume-2026",
+      "description": "Hypertrophy was enhanced by higher resistance-training volume, with at least 10 sets per week as the highlighted threshold.",
+      "target_population": "healthy adults; weekly volume",
+      "source": "https://doi.org/10.1249/MSS.0000000000003897",
+      "evidence_type": "external_evidence",
+      "version": "training-principles-v1",
+      "implementation_note": "Movement-pattern volume is only an imperfect proxy for muscle-group volume; it is not treated as a single-session 10-set prescription."
+    },
+    {
+      "rule_id": "who-weekly-activity-2020",
+      "description": "Adults should accumulate 150–300 minutes of moderate aerobic activity or equivalent weekly activity and perform muscle-strengthening activity for all major muscle groups on at least 2 days per week.",
+      "target_population": "adults; weekly public-health guidance",
+      "source": "https://www.who.int/publications/i/item/9789240015128",
+      "evidence_type": "external_evidence",
+      "version": "training-principles-v1",
+      "implementation_note": "This is long-term context. Current workout generation does not infer a weekly schedule from it."
+    },
+    {
+      "rule_id": "session-volume-allocation-v1",
+      "description": "Allocate a conservative number of sets per selected exercise according to experience, history, recovery, and the hard session-time limit.",
+      "target_population": "single session; available history",
+      "source": "local:training-principles.json",
+      "evidence_type": "product_heuristic",
+      "version": "training-principles-v1",
+      "implementation_note": "Exact session set allocation and duration caps are product rules, not a direct numeric recommendation from ACSM or WHO."
+    },
+    {
+      "rule_id": "session-rep-rest-effort-v1",
+      "description": "Use goal-specific rep, rest, and effort ranges as adjustable starting points; never infer an unmeasured 1RM.",
+      "target_population": "healthy adult MVP; load data may be absent",
+      "source": "local:training-principles.json",
+      "evidence_type": "product_heuristic",
+      "version": "training-principles-v1",
+      "implementation_note": "Specific defaults are product calibrations and need user outcome data."
+    },
+    {
+      "rule_id": "recovery-volume-v1",
+      "description": "Reduce planned volume when the user reports fatigue or recent high movement-pattern volume.",
+      "target_population": "reported fatigue; recent training records",
+      "source": "local:training-principles.json",
+      "evidence_type": "product_heuristic",
+      "version": "training-principles-v1",
+      "implementation_note": "Exact reductions and recent-load thresholds are product heuristics."
+    },
+    {
+      "rule_id": "history-progression-v1",
+      "description": "Only progress after repeated successful exposure; regress or maintain after hard, failed, interrupted, or painful sets.",
+      "target_population": "valid SetRecord history",
+      "source": "local:training-principles.json",
+      "evidence_type": "product_heuristic",
+      "version": "training-principles-v1",
+      "implementation_note": "Evidence counts and adjustment steps are product rules. Pain remains a Safety Gate concern and is never treated as ordinary difficulty."
+    },
+    {
+      "rule_id": "stimulus-first-allocation-v1",
+      "description": "Resolve goal-specific required movement stimulus before selecting exercises that satisfy it.",
+      "target_population": "structured goal and session context",
+      "source": "local:training-principles.json",
+      "evidence_type": "product_heuristic",
+      "version": "training-principles-v1",
+      "implementation_note": "Pattern allocations are deterministic product mappings, not clinical prescriptions."
+    },
+    {
+      "rule_id": "duration-hard-cap-v1",
+      "description": "Estimated required session duration must not exceed the user's stated maximum; remove lower-priority volume or movements before reducing rest assumptions.",
+      "target_population": "explicit maximum duration",
+      "source": "local:training-principles.json",
+      "evidence_type": "product_heuristic",
+      "version": "training-principles-v1",
+      "implementation_note": "A deterministic product constraint."
+    },
+    {
+      "rule_id": "history-capability-adjustment-v2",
+      "description": "Build confidence-labeled capability estimates from recent completed exercise and compatible movement evidence; adjust dose one bounded step at a time with hysteresis.",
+      "target_population": "Adults with recorded workout and set history",
+      "source": "local:training-principles.json",
+      "evidence_type": "product_heuristic",
+      "version": "training-principles-v1",
+      "implementation_note": "Confidence bands, staleness cutoffs, progression steps, and movement compatibility are product heuristics. The estimate is not a physiological measurement; pain remains a Safety Gate condition."
+    }
+  ]
+}

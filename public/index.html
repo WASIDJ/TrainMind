@@ -1,0 +1,882 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>TrainMind</title><link rel="stylesheet" href="/trainmind-ui.css"><link rel="stylesheet" href="/visual-design.css"></head><body>
+<div class="shell">
+  <header class="appbar"><div class="brand"><span class="brandmark" aria-hidden="true"><svg viewBox="0 0 26 26"><path d="M15 2 5 15h7l-1 9 10-13h-7z" fill="currentColor"/></svg></span><span>TrainMind<small>训练工作室</small></span></div><div class="appbar-end"><span class="appbar-date"></span><button class="avatar" aria-label="切换训练者 ID"></button></div></header>
+  <main id="app"></main>
+  <nav class="bottomnav" aria-label="主导航"><button type="button" class="navitem" data-tab="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-7h6v7"/></svg><span>首页</span></button><button type="button" class="navitem" data-tab="training"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 12h10M7 7v10M17 7v10M3 9v6M21 9v6M3 12h4m10 0h4"/></svg><span>计划</span></button><button type="button" class="navitem" data-tab="records"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19h16M6 15v-4m6 4V6m6 9V9"/></svg><span>记录</span></button><button type="button" class="navitem" data-tab="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg><span>我的</span></button></nav>
+</div><script>
+const app=document.querySelector('#app');let workout=null,interpretation=null,timer=null,lastSpoken='',editingPlan=false;// 演示入口:?user=demo-investor 直接切到指定训练者(写进 localStorage,后续页面沿用)
+const urlUser=new URLSearchParams(location.search).get('user');if(urlUser&&/^[a-zA-Z0-9_-]{1,40}$/.test(urlUser))localStorage.setItem('trainmind-user-id',urlUser);
+let userId=localStorage.getItem('trainmind-user-id')||'demo-user';
+// 手机测试入口:URL 带 ?k=口令 时直接存下,免去每次解锁都要手输(x-mobile-key)
+try{const urlKey=new URLSearchParams(location.search).get('k');if(urlKey)localStorage.setItem('trainmind-mobile-key',urlKey)}catch{}const labels={gym:'健身房',home:'居家',office:'办公室',moderate:'中等',low:'低强度',high:'高强度'};document.querySelector('.avatar').onclick=()=>{const next=prompt('训练者 ID（例如 tester-a）',userId);if(next&&/^[a-zA-Z0-9_-]{1,40}$/.test(next.trim())){userId=next.trim();localStorage.setItem('trainmind-user-id',userId);location.reload()}else if(next)alert('请使用 1–40 位英文、数字、连字符或下划线。')};
+let voiceState='idle',voiceCaption='',recognition=null,voiceToken=0,cadenceMs=3000,cadenceTimer=null,repCount=0,actualRepsOverride=null,actionBusy=false,voiceEnabled=false,voicePermissionReady=false,autoListenTimer=null,pendingRestCue='',lastTrainingCue='',repProgressKey='',guideRepCount=0,localRecognitionReady=false,listenRetries=0,coachBusy=false,coachTurn=0;let coachHistory=[],offlineSpeechAvailable=false,offlineRecorder=null,cadenceActive=false,cadenceEpoch=0,voiceInputTarget='coach',voiceCapabilityPromise=null,coachRequest=null,coachError=null;
+let pageGeneration=0,sessionGeneration=0,sessionIdentity=null,actionGeneration=0,lifecycleSuspended=false,lifecyclePausePromise=null,lifecycleError='';
+const suspendedSessionKey='trainmind-suspended-session';
+function viewStamp(){const id=workout?.sessionId??null;if(id!==sessionIdentity){sessionIdentity=id;sessionGeneration++}return{page:pageGeneration,session:sessionGeneration,id,screen:document.querySelector('.shell').dataset.screen}}
+// D4(2026-11-09):不再把 document.hidden 并入"视图是否还有效"。
+// 旧逻辑:生成计划时切到微信再回来,响应被判"视图已失效"直接丢弃,按钮永远停在
+// "正在生成计划…"(catch 也不复位),只能退出重进。
+function currentView(stamp){const current=viewStamp();return stamp.page===current.page&&stamp.session===current.session&&stamp.id===current.id&&stamp.screen===current.screen}
+function setWorkout(next){workout=next;if(next?.sessionId!==localStorage.getItem(suspendedSessionKey)||['completed','aborted'].includes(next?.status))lifecycleSuspended=false;if(next&&['completed','aborted'].includes(next.status)&&next.sessionId===localStorage.getItem(suspendedSessionKey))localStorage.removeItem(suspendedSessionKey);viewStamp()}
+function eventContext(w=workout){return{sessionId:w.sessionId,exerciseId:w.exercises[w.runtime.currentExerciseIndex]?.exerciseId??null,setNumber:w.runtime.currentSetNumber,coachPhase:w.runtime.coach?.phase??null,status:w.status,eventCount:w.runtime.events.length}}
+const SpeechRecognitionApi=window.isSecureContext&&(window.SpeechRecognition||window.webkitSpeechRecognition);function voiceLog(event,details={}){console.info(JSON.stringify({timestamp:new Date().toISOString(),event,userId,...details}))}voiceLog('voice_supported',{speechRecognition:!!SpeechRecognitionApi,speechSynthesis:'speechSynthesis'in window,isSecureContext:window.isSecureContext});
+function speakDigits(text){
+  const d='零一二三四五六七八九';
+  const one=n=>n<10?d[n]:n<20?'十'+(n%10?d[n%10]:''):n%10===0?(n/10===2?'二十':d[n/10]+'十'):(n/10===2?'二十':d[n/10]+'十')+d[n%10];
+  return String(text).replace(/\d+/g,m=>{const n=Number(m);return n<=99?one(n):(n%100===0?d[n/100]+'百':m)});
+}
+function asrRetryTelemetry(reason){try{fetch('/api/voice/asr_retry',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({userId,reason})}).catch(()=>{})}catch{}}
+function voiceUI(){
+  const homeMic=document.querySelector('#home-mic'),homeStatus=document.querySelector('#home-voice-status');
+  if(homeMic){
+    homeMic.disabled=!(SpeechRecognitionApi||offlineSpeechAvailable);
+    homeMic.textContent=voiceInputTarget==='home'&&voiceState==='listening'?'结束说话':voiceInputTarget==='home'&&voiceState==='processing'?'识别中…':'语音输入';
+    if(voiceInputTarget==='home'&&voiceCaption)homeStatus.textContent=voiceCaption;
+  }
+  microphoneHelp();
+  const orb=document.querySelector('#voice-orb'),status=document.querySelector('#voice-status'),caption=document.querySelector('#voice-caption');
+  const planStatus=document.querySelector('#plan-voice-status');if(planStatus&&voiceCaption)planStatus.textContent=voiceCaption;
+  if(!status||!caption)return;if(orb)orb.className=`voice-orb ${voiceState}`;
+  const labels={idle:'语音提示已开启',starting:'正在申请麦克风…',listening:'正在听你说',permission_denied:'麦克风访问被拒绝',browser_blocked:'内嵌页面限制了麦克风',device_missing:'未找到麦克风',device_busy:'麦克风暂时无法打开',unsupported:'当前无法使用语音输入',coach_error:'教练暂时无法回复',error:'语音暂不可用，可输入文字继续交流',processing:'正在处理你的反馈…',speaking:cadenceActive?'跟练报数':'教练正在说'};
+  status.textContent=labels[voiceState]??labels.idle;caption.textContent=voiceCaption||'按自己的节奏做，整组结束后告诉我。';
+  const mic=document.querySelector('#mic');if(mic){mic.disabled=!(SpeechRecognitionApi||offlineSpeechAvailable);mic.textContent=voiceState==='listening'?(offlineRecorder?'结束说话':'暂停聆听'):'与教练说话'}
+}
+async function microphoneFailure(error,token=voiceToken){
+  const windows=/Windows/i.test(navigator.userAgent)&&!/Android/i.test(navigator.userAgent),settings=windows?'地址栏的网站权限和 Windows 麦克风设置':'手机浏览器的网站权限和系统应用麦克风权限';
+  const policy=document.permissionsPolicy||document.featurePolicy;let permission='unknown';
+  try{permission=(await navigator.permissions.query({name:'microphone'})).state}catch{}
+  if(token!==voiceToken)return;
+  voiceEnabled=false;voicePermissionReady=false;
+  if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia){voiceState='unsupported';voiceCaption='当前页面不能访问麦克风。请改用 Chrome 浏览器打开本机地址（并在系统设置里允许 Chrome 使用麦克风），或使用 HTTPS。'}
+  else if(policy?.allowsFeature('microphone')===false){voiceState='browser_blocked';voiceCaption='当前内嵌页面禁止访问麦克风，无法弹出授权窗口。请在系统浏览器中打开后允许麦克风。'}
+  else if(error?.name==='NotFoundError'){voiceState='device_missing';voiceCaption='没有找到可用麦克风，请检查当前设备的输入设备或耳机连接。'}
+  else if(error?.name==='NotReadableError'){voiceState='device_busy';voiceCaption='麦克风无法打开，可能被其他程序占用。请检查输入设备后重试。'}
+  else if(error?.name==='NotAllowedError'){voiceState='permission_denied';voiceCaption=`麦克风访问被拒绝。请在${settings}中允许访问，再点击“检查后重试”。内嵌页面请改用系统浏览器。`}
+  else {voiceState='error';voiceCaption='无法获取麦克风声音，请检查设备后重试，也可以输入文字。'}
+  voiceLog('microphone_error',{name:error?.name,permission,policyAllowed:policy?.allowsFeature('microphone'),embedded:window.self!==window.top});voiceUI();
+}
+function microphoneHelp(){
+  const windows=/Windows/i.test(navigator.userAgent)&&!/Android/i.test(navigator.userAgent);
+  const blocked=['permission_denied','browser_blocked','device_missing','device_busy','unsupported'].includes(voiceState),host=document.querySelector('#home-voice-status')??document.querySelector('#voice-caption');
+  let help=document.querySelector('#microphone-help');if(!blocked){help?.remove();return}if(!host)return;
+  if(!help){help=document.createElement('div');help.id='microphone-help';help.className='microphone-help';help.innerHTML=(windows?'<button type="button" data-microphone-action="open-browser">在系统浏览器中打开</button><button type="button" data-microphone-action="open-settings">Windows 麦克风设置</button>':'<span>请在当前浏览器的网站权限中允许麦克风；同时检查系统设置中的浏览器应用权限。</span>')+'<button type="button" data-microphone-action="retry">检查后重试</button>';host.after(help);help.querySelectorAll('button').forEach(button=>button.onclick=async()=>{if(button.dataset.microphoneAction==='retry'){(document.querySelector('#home-mic')??document.querySelector('#mic'))?.click();return}button.disabled=true;try{await api(`/api/voice/${button.dataset.microphoneAction}`,{});voiceCaption=button.dataset.microphoneAction==='open-browser'?'已在系统浏览器打开。请在那里点击语音输入并允许麦克风。':'已打开 Windows 设置。调整后返回这里重试。';voiceUI()}catch(error){voiceCaption=error.message;voiceUI()}finally{button.disabled=false}})}
+}
+function formatDuration(text){const sec=Number(String(text).match(/\d+/)?.[0]||0);if(!sec)return String(text);return sec>=120?`${Math.round(sec/60)} 分钟`:`${sec} 秒`;}
+function doseText(x){
+  if(x.repOrTimeBased==='time')return formatDuration(x.targetReps);
+  const side=x.unilateral||/单臂|单腿|\/侧/.test(x.name+x.targetReps);
+  const range=x.targetReps.replace(/\/侧/g,'').trim();return `${side?'每侧 ':''}${range} 次`;
+}
+function doseExplanation(x){
+  if(x.repOrTimeBased==='time')return '这是本组的建议时长，完成后确认。';
+  const numbers=x.targetReps.match(/\d+/g)??[],side=x.unilateral||/单臂|单腿|\/侧/.test(x.name+x.targetReps);
+  return `${side?'左右两侧分别做':'这一组建议做'} ${numbers.length>1?`${numbers[0]} 到 ${numbers[1]}`:numbers[0]} 次。这是本组建议数，不是已完成进度；动作稳定优先，结束后按实际完成情况记录。`;
+}
+function stopCadence(){
+  cadenceActive=false;cadenceEpoch++;clearTimeout(cadenceTimer);cadenceTimer=null;
+  const button=document.querySelector('#cadence-toggle');if(button)button.textContent='陪我报数';
+  const options=document.querySelector('.cadence-options');if(options)options.hidden=true;
+}
+function setRingProgress(fraction){
+  const arc=document.querySelector('.tm-ring circle.ring-arc');
+  if(arc){const c=2*Math.PI*76;arc.style.strokeDasharray=(Math.max(0,Math.min(1,fraction))*c).toFixed(1)+' '+c.toFixed(1)}
+}
+// D6(2026-11-09):整页只用一个 AudioContext。此前每组 new 一个且从不 close,
+// 5 动作×3 组就是 15 个;iOS Safari 上限 4、部分安卓 WebView 超限后新建/播放静默失败
+// (被 catch{} 吞掉),表现为"练到后半段突然没提示音了"。
+let chimeCtx=null;
+function chimeAudio(){if(!chimeCtx){try{chimeCtx=new (window.AudioContext||window.webkitAudioContext)()}catch{return null}}if(chimeCtx.state==='suspended')try{chimeCtx.resume()}catch{}return chimeCtx}
+function completionChime(){
+  const ctx=chimeAudio();if(!ctx)return;
+  try{const play=(freq,at,dur)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=freq;o.connect(g);g.connect(ctx.destination);g.gain.setValueAtTime(0.0001,ctx.currentTime+at);g.gain.exponentialRampToValueAtTime(0.18,ctx.currentTime+at+0.02);g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+at+dur);o.start(ctx.currentTime+at);o.stop(ctx.currentTime+at+dur+0.05)};play(880,0,0.12);play(1174.7,0.14,0.22)}catch{}
+}
+// D16-C 落地:次数由系统持有 —— 报数累计为默认,学员口头更正优先,永不再盘问次数
+function countedReps(){if(actualRepsOverride!==null)return actualRepsOverride;if(guideRepCount>0)return guideRepCount;return null;}
+// 次数来源:口报=reported / 报数累计=counted / 无=undefined(服务端记为 assumed,进步统计排除)
+function repsSource(){if(actualRepsOverride!==null)return 'reported';if(guideRepCount>0)return 'counted';return undefined;}
+// D1(2026-11-09, owner 裁决):报数是**可选功能** —— 用户报了就把次数真正带上(counted/reported),
+// 没报就不带,服务端仍按计划推定(assumed)。不主动问、不追问,与 D17 不冲突。
+function completionReps(){const value=countedReps();if(value===null)return{};const src=repsSource();return{actualReps:value,...(src?{actualRepsSource:src}:{})}}
+function displayTarget(x,value=actualRepsOverride){
+  return x.repOrTimeBased==='time'?formatDuration(value??x.targetReps):String(value??x.targetReps.match(/\d+/)?.[0]??'—').padStart(2,'0');
+}
+function updateRepProgress(){
+  const x=workout?.exercises[workout.runtime.currentExerciseIndex],node=document.querySelector('#cadence-count');
+  const count=document.querySelector('#rep-display'),label=document.querySelector('#rep-display-label');if(count&&x)count.textContent=displayTarget(x);if(x){const t=Number(x.targetReps.match(/\d+/g)?.at(-1)||8);setRingProgress(cadenceActive?(guideRepCount/t):((actualRepsOverride??guideRepCount)/t))}if(label&&x)label.textContent=actualRepsOverride!==null?(x.repOrTimeBased==='time'?'你报告的时长':'你报告的次数'):(x.repOrTimeBased==='time'?'本组目标时长':'本组目标 · '+doseText(x));if(node&&x)node.textContent=actualRepsOverride!==null?`你报了 ${actualRepsOverride} ${x.repOrTimeBased==='time'?'秒':'次'}，整组结束后再确认`:'按自己的节奏做，整组完成后说“做完了”';
+}
+function beginCadence(reset=true){
+  stopCadence();if(workout?.status!=='exercise_active')return;
+  const x=workout.exercises[workout.runtime.currentExerciseIndex];
+  const key=`${workout.sessionId}:${workout.runtime.currentExerciseIndex}:${workout.runtime.currentSetNumber}`;
+  const isNewSet=repProgressKey!==key;
+  if(isNewSet){repProgressKey=key;repCount=0;actualRepsOverride=null}
+  // D8/A3(2026-11-09):组内话术 ≤30 字(铁律 3)。剂量用 targetReps 原文,避免把"300秒"念成"300 次";
+  // 动作要领只上屏,不进语音;结尾不再追问。
+  lastTrainingCue=`第 ${workout.runtime.currentSetNumber} 组，${x.name}，${x.currentWeight?x.currentWeight+' 公斤':'自重'}，建议 ${x.targetReps}。`;
+  updateRepProgress();if(reset&&(isNewSet||!lastTrainingCue)){if(workout.runtime.coach)runCoachSet();else speech.play(lastTrainingCue)}
+}
+async function coachEvent(type){
+  const stamp=viewStamp();
+  const sessionId=workout?.sessionId,index=workout?.runtime.currentExerciseIndex,set=workout?.runtime.currentSetNumber,phase=workout?.runtime.coach?.phase,epoch=cadenceEpoch;
+  if(!phase||workout.status!=='exercise_active')return null;
+  const d=await api(`/api/workouts/${sessionId}/actions`,{type:'coach_event',event:{type},context:eventContext()});
+  if(d.stale||!currentView(stamp)||epoch!==cadenceEpoch||workout?.sessionId!==sessionId||workout.runtime.currentExerciseIndex!==index||workout.runtime.currentSetNumber!==set||workout.status!=='exercise_active')return null;
+  setWorkout(d.workout);return d;
+}
+async function runCoachSet(){
+  const epoch=cadenceEpoch;
+  try{
+    if(workout.runtime.coach.phase==='READY'){const d=await coachEvent('start_set');if(!d)return;if(d?.directive?.text)lastTrainingCue=d.directive.text}
+    if(epoch!==cadenceEpoch||workout?.status!=='exercise_active')return;
+    // 产品决定(2026-11-05 真机):组内不再 1,2,3 报数——速度由学员自己掌握;也不再在组末盘问感受
+    speech.play(lastTrainingCue,()=>{
+      if(epoch!==cadenceEpoch||workout?.status!=='exercise_active')return;
+      speech.play('开始，按自己的节奏来。',async()=>{
+        if(epoch!==cadenceEpoch||workout?.status!=='exercise_active')return;
+        try{await coachEvent('guidance_started')}catch(error){voiceCaption=error.message;voiceUI();scheduleAutoListen()}
+      });
+    });
+  }catch(error){voiceCaption=error.message;voiceUI();scheduleAutoListen()}
+}
+function setCadenceSpeed(seconds){
+  cadenceMs=Math.max(1500,Math.min(6000,Number(seconds)*1000));
+  const slider=document.querySelector('#cadence-speed'),output=document.querySelector('#cadence-interval');
+  if(slider)slider.value=cadenceMs/1000;if(output)output.textContent=`约 ${cadenceMs/1000} 秒 / 次`;
+  const beat=document.querySelector('.cadence-beat');if(beat)beat.style.setProperty('--cadence-period',cadenceMs+'ms');
+  if(cadenceTimer&&cadenceActive){clearTimeout(cadenceTimer);const epoch=cadenceEpoch;cadenceTimer=setTimeout(()=>cadenceTick(epoch),cadenceMs)}
+}
+function cadenceTick(epoch){
+  cadenceTimer=null;if(document.hidden||lifecycleSuspended||!cadenceActive||epoch!==cadenceEpoch||workout?.status!=='exercise_active')return;
+  if(workout.runtime.coach&&(recognition?.coachHeard||offlineRecorder?.heard||voiceState==='processing'||coachBusy)){cadenceTimer=setTimeout(()=>cadenceTick(epoch),200);return}
+  if(recognition&&!workout.runtime.coach){stopCadence();return}
+  const x=workout.exercises[workout.runtime.currentExerciseIndex],bounds=x.targetReps.match(/\d+/g),target=Number(bounds?.at(-1)||8);
+  guideRepCount++;const startedAt=Date.now();const count=document.querySelector('#rep-display'),label=document.querySelector('#rep-display-label');if(count)count.textContent=String(guideRepCount).padStart(2,'0');setRingProgress(guideRepCount/target);if(label)label.textContent='跟练报数 · 目标 '+doseText(x);
+  const beat=document.querySelector('.cadence-beat');if(beat){beat.classList.remove('pulse');void beat.offsetWidth;beat.classList.add('pulse')}
+  speech.play(String(guideRepCount),()=>{
+    if(!cadenceActive||epoch!==cadenceEpoch)return;
+    if(guideRepCount>=target){stopCadence();setRingProgress(1);completionChime();voiceCaption='本组结束。做完后说「做完了」，或滑动完成。';voiceUI();scheduleAutoListen();return}
+    cadenceTimer=setTimeout(()=>cadenceTick(epoch),Math.max(0,cadenceMs-(Date.now()-startedAt)));
+  });
+}
+function startCadence(reset=true,automatic=false){
+  if(workout?.status!=='exercise_active')return;
+  const x=workout.exercises[workout.runtime.currentExerciseIndex];if(x.repOrTimeBased==='time'){if(workout.runtime.coach){const epoch=cadenceEpoch;cadenceTimer=setTimeout(()=>{if(epoch===cadenceEpoch&&workout?.status==='exercise_active'){setRingProgress(1);completionChime();voiceCaption='这段结束了。做完后说「做完了」，或滑动完成。';voiceUI();scheduleAutoListen()}},Number(x.targetReps.match(/\d+/)?.[0]||30)*1000)}return;}
+  stopCadence();cadenceActive=true;const epoch=cadenceEpoch;if(reset)guideRepCount=0;
+  document.querySelector('#cadence-toggle').textContent='停止报数';document.querySelector('.cadence-options').hidden=false;
+  setCadenceSpeed(cadenceMs/1000);
+  const intro=reset?`我陪你数，按自己的速度来。${x.voiceCues?.breathingCue??''}`:'好，按这个速度继续。';
+  if(automatic)cadenceTick(epoch);else speech.play(intro,()=>{if(cadenceActive&&epoch===cadenceEpoch)cadenceTick(epoch)});
+}
+function toggleCadence(){
+  if(cadenceActive){stopCadence();speech.stop();voiceState='idle';voiceCaption='已停止报数，按自己的节奏继续。';voiceUI()}else startCadence();
+}
+function stopListening(){clearTimeout(autoListenTimer);voiceToken++;if(recognition){try{recognition.abort()}catch{}recognition=null}if(voiceState==='listening'||voiceState==='starting')voiceState='idle';voiceUI()}
+function scheduleAutoListen(delay=350){clearTimeout(autoListenTimer);if(document.hidden||lifecycleSuspended||!voiceEnabled||(cadenceActive&&!workout?.runtime.coach)||voiceInputTarget!=='coach')return;autoListenTimer=setTimeout(()=>{if(document.hidden||lifecycleSuspended||!voiceEnabled||(cadenceActive&&!workout?.runtime.coach)||voiceInputTarget!=='coach')return;if(actionBusy||window.speechSynthesis?.speaking||window.speechSynthesis?.pending||voiceState==='speaking'||voiceState==='processing'){scheduleAutoListen(500);return}if((voicePermissionReady||workout?.runtime.coach)&&(document.querySelector('.shell').dataset.screen==='coach'||['preview','exercise_active','set_feedback','resting','paused','cooling_down','completed'].includes(workout?.status))&&!recognition)listen(true)},delay)}function primeVoiceFromGesture(){
+  voiceInputTarget='coach';voiceEnabled=true;listenRetries=0;speech.play('语音提示已开启，我会提示动作、组间休息和训练反馈。');
+}
+function recordingWav(chunks,sampleRate){
+  const length=chunks.reduce((n,x)=>n+x.length,0),samples=new Float32Array(length);let at=0;
+  for(const chunk of chunks){samples.set(chunk,at);at+=chunk.length}
+  const ratio=sampleRate/16000,count=Math.floor(length/ratio),buffer=new ArrayBuffer(44+count*2),view=new DataView(buffer);
+  const text=(offset,value)=>{for(let i=0;i<value.length;i++)view.setUint8(offset+i,value.charCodeAt(i))};
+  text(0,'RIFF');view.setUint32(4,36+count*2,true);text(8,'WAVE');text(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,16000,true);view.setUint32(28,32000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);text(36,'data');view.setUint32(40,count*2,true);
+  for(let i=0;i<count;i++){const start=Math.floor(i*ratio),end=Math.max(start+1,Math.min(length,Math.floor((i+1)*ratio)));let sample=0;for(let j=start;j<end;j++)sample+=samples[j];sample=Math.max(-1,Math.min(1,sample/(end-start)));view.setInt16(44+i*2,sample<0?sample*32768:sample*32767,true)}
+  return new Blob([buffer],{type:'audio/wav'});
+}
+function toggleListening(){
+  voiceInputTarget='coach';if(coachBusy){coachRequest?.abort();coachTurn++;coachBusy=false}
+  if(offlineRecorder){offlineRecorder.finish(true);return}
+  if(recognition){voiceEnabled=false;stopListening();voiceCaption='已暂停聆听';voiceUI()}else listen();
+}
+async function listenOffline(onTranscript=handleCoachInput){
+  if(document.hidden||lifecycleSuspended)return;
+  if(!workout?.runtime.coach)stopCadence();speech.stop();const token=++voiceToken;
+  voiceState='starting';voiceCaption='正在打开麦克风…';voiceUI();
+  try{
+    if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia)throw new DOMException('Microphone unavailable','SecurityError');
+    const stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true}});
+    if(token!==voiceToken){stream.getTracks().forEach(x=>x.stop());return}
+    const context=new (window.AudioContext||window.webkitAudioContext)();await context.resume();
+    if(token!==voiceToken){stream.getTracks().forEach(x=>x.stop());context.close();return}
+    const source=context.createMediaStreamSource(stream),processor=context.createScriptProcessor(4096,1,1),chunks=[];
+    const startedAt=Date.now();
+    let closed=false,heard=false,lastSound=Date.now();
+    // 录音计时回显:用户能看见「它正在听我说话」,说完稍停即结束
+    const elapsedTimer=setInterval(()=>{if(token!==voiceToken||closed)return;voiceCaption='正在听 '+Math.round((Date.now()-startedAt)/1000)+' 秒'+(heard?'，说完稍停':'，请开始说');voiceUI()},1000);
+    const finish=async send=>{
+      if(closed)return;closed=true;clearInterval(silenceTimer);clearInterval(elapsedTimer);clearTimeout(limitTimer);
+      processor.disconnect();source.disconnect();stream.getTracks().forEach(x=>x.stop());context.close();
+      if(offlineRecorder?.token===token)offlineRecorder=null;
+      if(recognition===handle)recognition=null;
+      if(!send||token!==voiceToken)return;
+      if(!heard){voiceState='idle';voiceCaption='正在等你，准备好后直接说。';voiceUI();if(voiceEnabled)scheduleAutoListen();return}
+      voiceState='processing';voiceCaption='正在听懂你的话…';voiceUI();
+      try{
+        const headers={'content-type':'audio/wav'},key=localStorage.getItem('trainmind-mobile-key');if(key)headers['x-mobile-key']=key;
+        let response;const netSignal=typeof AbortSignal!=='undefined'&&AbortSignal.timeout?AbortSignal.timeout(12000):undefined;
+        try{response=await fetch('/api/voice/transcribe?userId='+encodeURIComponent(userId),{method:'POST',headers,body:recordingWav(chunks,context.sampleRate),signal:netSignal})}catch(netError){throw Error('网络连接中断——请检查数据线是否插好,然后点麦克风重试')}
+        const result=await response.json().catch(()=>({}));
+        if(token!==voiceToken)return;if(!response.ok){if(response.status!==422)asrRetryTelemetry('transcribe_'+response.status);throw Error(result.error)};
+        // 识别结果即时回显:用户立刻能对上「我说的 vs 它听到的」
+        voiceCaption='听到：「'+result.text+'」';voiceUI();
+        if(voiceInputTarget==='home'){onTranscript(result.text,result);return}
+        if(result.confidence<0.45){voiceEnabled=false;voiceState='idle';voiceCaption=`我听到：“${result.text}”。请确认后发送。`;const input=document.querySelector('#coach-input');if(input){input.value=result.text;for(let ancestor=input.parentElement;ancestor;ancestor=ancestor.parentElement)if(ancestor.tagName==='DETAILS')ancestor.open=true;input.focus({preventScroll:true});input.form?.scrollIntoView({block:'nearest'})}voiceUI();return}
+        await onTranscript(result.text);
+      }catch(error){if(token!==voiceToken)return;voiceState='error';voiceCaption=/network|fetch|timeout/i.test(error?.message||'')?error.message:('识别出了问题('+((error?.message||'').slice(0,30))+'),点麦克风重试');voiceUI();if(voiceEnabled)scheduleAutoListen(2000)}
+    };
+    const handle={abort:()=>finish(false)};recognition=handle;offlineRecorder={token,finish,get heard(){return heard}};
+    processor.onaudioprocess=e=>{const input=e.inputBuffer.getChannelData(0);let energy=0;for(const sample of input)energy+=sample*sample;if(Math.sqrt(energy/input.length)>0.012){if(!heard){heard=true;clearTimeout(limitTimer);limitTimer=setTimeout(()=>finish(true),20000)}lastSound=Date.now()}if(heard)chunks.push(new Float32Array(input));e.outputBuffer.getChannelData(0).fill(0)};
+    source.connect(processor);processor.connect(context.destination);
+    const silenceTimer=setInterval(()=>{if((voiceInputTarget!=='home'&&heard&&Date.now()-lastSound>2200)||(!heard&&!voiceEnabled&&Date.now()-lastSound>8000))finish(true)},200);
+    let limitTimer=voiceEnabled&&voiceInputTarget==='coach'?null:setTimeout(()=>finish(true),20000);
+    voicePermissionReady=true;voiceState='listening';voiceCaption=voiceInputTarget==='home'?'正在听，请完整说出需求，说完点击“结束说话”（最长20秒）。':'正在听，说完稍停一下，我会回应；也可以点击“结束说话”。';voiceUI();
+  }catch(error){await microphoneFailure(error,token)}
+}
+function listen(automatic=false,onTranscript=handleCoachInput){
+  if(document.hidden||lifecycleSuspended)return;
+  if(recognition)return;
+  if(offlineSpeechAvailable){if(!automatic)voiceEnabled=voiceInputTarget==='coach';listenOffline(onTranscript);return}
+  if(!SpeechRecognitionApi){voiceState='unsupported';voiceCaption='当前浏览器不支持语音输入，可以在下方输入文字与教练交流。';voiceUI();return}
+  if(!automatic){voiceEnabled=voiceInputTarget==='coach';listenRetries=0}
+  if(!workout?.runtime.coach)stopCadence();speech.stop();
+  const token=++voiceToken;
+  let attempts=0,refreshes=0,gotAny=false;
+  const startAttempt=()=>{
+    voiceState='starting';voiceCaption='正在打开麦克风…';voiceUI();
+    let rec;try{rec=new SpeechRecognitionApi()}catch(error){voiceState='error';voiceCaption='无法打开麦克风，可在下方输入文字继续对话。';voiceLog('recognition_error',{error:String(error)});asrRetryTelemetry(String(error).slice(0,40));voiceUI();return}
+    recognition=rec;rec.lang='zh-CN';rec.interimResults=true;rec.maxAlternatives=1;
+    let settled=false,watch=0,deaf=0;const settle=()=>{if(!settled){settled=true;clearTimeout(watch)};clearTimeout(deaf)};
+    // 启动看门狗:部分安卓设备首个识别会话静默挂起(授权后无任何事件)→ 5 秒中止重试一次,再失败给出可见错误
+    watch=setTimeout(()=>{if(token!==voiceToken)return;settle();try{rec.abort()}catch{}if(recognition===rec)recognition=null;
+      if(attempts<1){attempts++;startAttempt();return}
+      voiceState='error';voiceCaption='麦克风启动超时，请再点一次重试。';asrRetryTelemetry('start_timeout');voiceUI()},5000);
+    rec.onspeechstart=()=>{if(token===voiceToken)rec.coachHeard=true};
+    if(localRecognitionReady)rec.processLocally=true;
+    rec.onstart=()=>{if(token!==voiceToken)return;settle();voicePermissionReady=true;voiceState='listening';
+      voiceCaption=voiceInputTarget==='home'?'正在听，请完整说出训练需求，比如：我在家，20分钟，练全身。':'正在听，你可以提问、报告次数或说“暂停”。';voiceUI();
+      // 聋场看门狗:已开始但 12 秒没有任何识别结果 → 刷新会话(最多 3 次),仍无则如实提示
+      deaf=setTimeout(()=>{if(token!==voiceToken||recognition!==rec||voiceState!=='listening')return;try{rec.abort()}catch{}recognition=null;
+        if(refreshes<3){refreshes++;startAttempt();return}
+        voiceState='error';voiceCaption='一直没听到你的声音，请靠近一点再说，或直接打字。';asrRetryTelemetry('session_deaf');voiceUI()},12000)};
+    rec.onresult=e=>{
+      if(token!==voiceToken)return;settle();gotAny=true;
+      if(e.results[e.results.length-1].isFinal===false){rec.coachHeard=true;voiceCaption='听到：「'+(e.results[e.results.length-1][0].transcript||'')+'」…';voiceUI();return}
+      const said=e.results[e.results.length-1][0].transcript;recognition=null;listenRetries=0;
+      Promise.resolve(onTranscript(said)).catch(error=>{voiceState='error';voiceCaption=error.message;voiceUI()});
+    };
+    rec.onerror=async e=>{
+      if(token!==voiceToken)return;settle();if(recognition===rec)recognition=null;
+      if(e.error==='aborted'){
+        // Android 授权/音频焦点切换会 abort 首个会话:尚未开始就被中断时静默重试一次,不再永远停在“正在打开”
+        if(voiceState==='starting'&&attempts<1){attempts++;startAttempt();return}
+        return;
+      }
+      asrRetryTelemetry(e.error);
+      if(e.error==='not-allowed'){await microphoneFailure(new DOMException('Access denied','NotAllowedError'),token);return}
+      const messages={network:'语音识别服务连接失败。可以重试，或在下方输入文字继续对话。','audio-capture':'没有获取到麦克风声音，请检查设备后重试。','no-speech':'没有听到声音，请再说一次。','not-allowed':'麦克风权限未开启，请允许访问后重试。','service-not-allowed':'当前浏览器无法使用语音识别服务，请在下方输入文字。','language-not-supported':'当前识别服务不支持中文，请在下方输入文字。'};
+      if(e.error==='no-speech'&&voiceEnabled){voiceState='listening';voiceCaption='正在等你，准备好后直接说。';voiceUI();scheduleAutoListen(500);return}
+      if(e.error==='network'&&voiceEnabled){rec.retryDelay=Math.min(5000,1000*++listenRetries);voiceState='error';voiceCaption=messages.network;voiceUI();scheduleAutoListen(rec.retryDelay);return}
+      voiceEnabled=false;
+      voiceState=e.error==='not-allowed'?'permission_denied':'error';voiceCaption=messages[e.error]??'语音识别暂不可用，可以在下方输入文字。';
+      voiceLog('recognition_error',{error:e.error});voiceUI();if(voiceEnabled)scheduleAutoListen(800);
+    };
+    rec.onend=()=>{if(token!==voiceToken)return;settle();if(recognition===rec)recognition=null;if(voiceState==='listening'&&!voiceEnabled){voiceState='idle';if(!gotAny)voiceCaption='没听到内容，请再点一次或直接打字。'}voiceUI();if(voiceEnabled&&!coachBusy)scheduleAutoListen(rec.retryDelay??500)};
+    rec.start();
+  };
+  startAttempt();
+}
+function spokenNumber(value){
+  if(/^\d+$/.test(value))return Number(value);
+  const digits={'零':0,'一':1,'二':2,'两':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9};
+  if(value.includes('十')){const [a,b]=value.split('十');return (a?digits[a]:1)*10+(b?digits[b]:0)}
+  return digits[value];
+}
+async function handleVoiceCommand(raw,wasPacing=false,source='voice'){
+  const said=raw.replace(/[\s，,。！？!?]/g,'');
+  if(workout?.runtime.coach&&['exercise_active','set_feedback','resting','paused'].includes(workout.status)&&!(/怎么|为什么|是否|是不是|能不能/.test(said))){
+    const pain=!/不疼|不痛|没(?:有)?(?:疼|痛)|没有.*(?:疼|痛)/.test(said)&&/疼|痛|(?:膝盖|肩膀|腰|身体).*不舒服/.test(said);
+    const mvp=/太重|偏重|有点重|有些重|感觉重|太沉|有点沉|吃力|轻一点|轻一些|太轻|偏轻|有点轻|有些轻|感觉轻|太轻松|重一点|重一些|正好|做完了|完成了|完成本组|^完成$|^实际|^\d+次$/.test(said);
+    if(pain||mvp){await action('coach_message',{message:raw},source);return true}
+  }
+  if(workout?.status==='completed'){
+    const number=spokenNumber(said.match(/[1-5一二三四五]/)?.[0]??'');
+    if(surveyStage==='effort'&&number)return nextSurvey('effort',number),true;
+    if(surveyStage==='muscle'&&number&&number<=3)return nextSurvey('muscle',number),true;
+    if(surveyStage==='pain'&&/没有|不痛|没疼/.test(said))return nextSurvey('pain','none'),true;
+    return false;
+  }
+  // 手不离开器械也能开始/重听:计划页直接说"开始"
+  if(workout?.status==='preview'){
+    if(/^(?:开始|开练|开始训练|开始吧|走起|练吧)$/.test(said)){await action('start',{coach:true},source);return true}
+    return false;
+  }
+  if(/^(?:再说一遍|重播|没听清|重复一下)$/.test(said)){speech.play(lastTrainingCue||voiceCaption||'按自己的节奏来。');return true}
+  if(/^(?:先|请|帮我)?(?:结束训练|停止训练)/.test(said)){await action('abort',{},source);return true}
+  if(/^(?:先|请|帮我)?(?:暂停|停一下|等一下|暂停训练)/.test(said)&&workout.status!=='paused'){await action('pause',{},source);return true}
+  if(workout.status==='paused'&&/^(?:请|我想)?(?:继续|恢复|开始)/.test(said)){await action('resume',{},source);return true}
+  if(workout.status==='resting'){
+    const more=said.match(/(?:再|多|加|延长)(?:休息)?([\d一二两三四五六七八九十]+)(分钟|秒)/);
+    if(more){const seconds=spokenNumber(more[1])*(more[2]==='分钟'?60:1);if(seconds>0&&seconds<=300){await action('extend_rest',{seconds},source);return true}}
+    if(/^(?:下一组|开始下一组|继续训练|我准备好了|准备好了|现在开始)$/.test(said)){await action('rest_complete',{},source);return true}
+  }
+  if(workout.status==='cooling_down'&&/^(?:完成|结束|好了|完成训练)$/.test(said)){await action('cooldown_complete',{},source);return true}
+  if(workout&&['exercise_active','set_feedback','resting','paused'].includes(workout.status)&&!(/怎么|为什么|是否|是不是|能不能/.test(said))){
+    const equipment=/器械.{0,4}(有人|被占|占用|占着|用不了|不能用|不行)|(?:帮我)?(?:换一个|换个动作)|这个做不了|这动作做不了/.test(said);
+    const timeLeft=/(?:只剩|只有|还剩|剩下)[\d零一二两三四五六七八九十]+分钟/.test(said);
+    if(equipment||timeLeft){await action('coach_message',{message:raw},source);return true}
+  }
+  const question=/怎么|为什么|多少|几组|几次|多久|还有|剩|能不能|是不是|是否/.test(said);
+  const count=said.match(/(?:只做了|做完了|做了|完成了)([\d零一二两三四五六七八九十]+)(?:次|个)/);
+  if(count&&!question){const n=spokenNumber(count[1]);if(Number.isFinite(n)){actualRepsOverride=n;repCount=n;updateRepProgress()}}
+  const painful=!/不疼|不痛|没有.*(?:疼|痛)/.test(said)&&/^(?:我.*)?(?:有点疼|疼痛|疼|痛|不舒服)|(?:现在|感觉|膝盖|肩膀|腰).*(?:疼|痛)/.test(said);
+  if(painful&&!question&&['exercise_active','set_feedback','resting'].includes(workout.status)){
+    // 疼痛随时可说:直接上报走安全通道,不再要求"先完成这一组"
+    await action('feedback',{feedback:'pain',...(countedReps()!==null?{actualReps:countedReps(),actualRepsSource:repsSource()}:{})},source);return true;
+  }
+  if(question)return false;
+  const feedback=/太轻|很轻|有点轻|有些轻|感觉轻|太轻松|重一点|重一些/.test(said)?'too_light':/做不完|失败/.test(said)?'failed':/太重|有点重|有些重|感觉重|太沉|有点沉|吃力|轻一点|轻一些|有点难|很难|有点累|太累|太难/.test(said)?'hard':/正好|合适/.test(said)?'right':null;
+  if(workout.status==='exercise_active'&&count&&(feedback||/做完了|完成了|完成本组/.test(said))){
+    if(workout.runtime.coach){await action('coach_message',{message:raw.replace(/有点难|很难|有点累|太累|太难/g,'太重')},source);return true}
+    await action('complete_set',completionReps(),source);
+    if(feedback&&workout.status==='set_feedback')await action('feedback',{feedback,actualReps:countedReps()??repCount,...(countedReps()!==null?{actualRepsSource:repsSource()}:{})},source);
+    return true;
+  }
+  if(workout.status==='set_feedback'&&feedback){await action('feedback',{feedback,...(countedReps()!==null?{actualReps:countedReps(),actualRepsSource:repsSource()}:{})},source);actualRepsOverride=null;return true}
+  if(workout.status==='set_feedback'&&count){speech.play(`记了 ${repCount} 次，我记下了。`);return true}
+  if(workout.status==='exercise_active'&&count){speech.play(`记了 ${repCount} 次，按这个数记下。`);return true}
+  if(workout.status==='exercise_active'&&/^(?:我)?(?:这一组|这组)?(?:做完了|完成了|完成本组|完成|做完|好了)$/.test(said)){await action('complete_set',completionReps(),source);return true}
+  if(workout.status==='exercise_active'&&/^(?:完成一次|又做了一个|又一次)$/.test(said)){repCount++;actualRepsOverride=repCount;updateRepProgress();speech.play(`已确认 ${repCount} 次。`);return true}
+  if(/^(?:请|帮我)?(?:换动作|换一个动作|换一个)$/.test(said)&&workout.status==='exercise_active'){await action('replace',{reason:'user_request'},source);return true}
+  if(/^跳过/.test(said)&&workout.status==='exercise_active'){await action('skip',{reason:'user_request'},source);return true}
+  if(/^(?:慢一点|快一点)$/.test(said)){setCadenceSpeed((cadenceMs+(said==='慢一点'?1000:-500))/1000);if(wasPacing)startCadence(false);else speech.play(said==='慢一点'?'好，放慢一些，按自己的速度来。':'好，节奏调快一些，以动作稳定为准。');return true}
+  if(workout.status==='exercise_active'&&/^(?:开始报数|陪我报数|陪我数|帮我数)$/.test(said)){startCadence();return true}
+  if(/^(?:停止报数|不要报数)$/.test(said)){stopCadence();speech.play('好，按自己的节奏继续，做完告诉我。');return true}
+  return false;
+}
+function coachMarkup(){return `<div id="coach-history" class="coach-history" role="log" aria-live="polite">${coachHistory.slice(-4).map(x=>`<p class="${x.role}"><strong>${x.role==='user'?'你':'教练'}：</strong>${esc(x.content)}</p>`).join('')}</div><details class="coach-chat"><summary>输入文字与教练交流</summary><form id="coach-form" class="coach-form"><input id="coach-input" aria-label="与教练对话" maxlength="500" placeholder="问动作、报告次数，或说暂停"><button>发送</button></form></details>`}
+function bindCoachConversation(){
+  if(!['exercise_active','set_feedback','resting','paused','cooling_down'].includes(workout?.status))return;
+  const host=document.querySelector('.training-voice-tools')??document.querySelector('.rest-chat')??document.querySelector('#voice-caption')?.parentElement;
+  if(!host||document.querySelector('#coach-form'))return;host.insertAdjacentHTML('beforeend',coachMarkup());
+  document.querySelector('#coach-form').onsubmit=e=>{e.preventDefault();const input=document.querySelector('#coach-input'),text=input.value.trim();if(text){input.value='';handleCoachInput(text,false,'touch')}};
+  updateCoachHistory();
+}
+function updateCoachHistory(){
+  const log=document.querySelector('#coach-history');if(!log)return;
+  const turns=document.querySelector('.coach-screen')?coachHistory:coachHistory.slice(-4);
+  log.innerHTML=turns.map(x=>`<p class="${x.role}"><strong>${x.role==='user'?'你':'教练'}：</strong>${esc(x.content)}</p>`).join('')+(coachError?`<div class="error" role="alert"><strong>这条消息没有收到回复</strong><p>${esc(coachError.message)}</p><div class="actions"><button id="retry-coach" class="secondary">重试这条消息</button><button id="fix-coach-settings" class="secondary">修改模型配置</button></div></div>`:coachBusy?'<p role="status">教练正在回复…</p>':'');
+  const retry=document.querySelector('#retry-coach');if(retry)retry.onclick=()=>handleCoachInput(coachError.input,true,'touch');
+  const settings=document.querySelector('#fix-coach-settings');if(settings)settings.onclick=()=>coachSettings(!!workout);
+  const send=document.querySelector('#coach-form button');if(send)send.textContent=coachBusy?'回复中…':'发送';
+  log.scrollTop=log.scrollHeight;
+}
+async function handleCoachInput(raw,retry=false,source='voice'){
+  const message=raw.trim();if(!message)return;
+  // D9(2026-11-09):此前 actionBusy 时静默 return,而调用方已经把输入框清空了 ——
+  // 用户以为发出去了,教练其实没收。这里给提示并把文字放回输入框。
+  if(actionBusy){voiceState='idle';voiceCaption='上一步还在提交，请稍后再发。';voiceUI();
+    const box=document.querySelector('#coach-input');if(box&&!box.value)box.value=message;return}
+  coachRequest?.abort();coachRequest=new AbortController();const request=coachRequest;
+  coachBusy=true;const turn=++coachTurn,sessionId=workout?.sessionId,wasPacing=cadenceActive,view=document.querySelector('.shell').dataset.screen;
+  stopListening();stopCadence();speech.stop();voiceState='processing';voiceCaption='正在想怎么回答你…';voiceUI();
+  coachError=null;const repeated=retry&&coachHistory.at(-1)?.role==='user'&&coachHistory.at(-1)?.content===message;const history=(repeated?coachHistory.slice(0,-1):coachHistory).slice(-8);if(!repeated)coachHistory.push({role:'user',content:message});updateCoachHistory();
+  try{
+    if(workout&&await handleVoiceCommand(message,wasPacing,source))return;
+    const state=workout?`${workout.status}:${workout.runtime.currentExerciseIndex}:${workout.runtime.currentSetNumber}`:'';
+    const result=await api(sessionId?`/api/workouts/${sessionId}/coach`:'/api/coach',{message,history},true,request.signal);
+    const currentState=workout?`${workout.status}:${workout.runtime.currentExerciseIndex}:${workout.runtime.currentSetNumber}`:'';
+    if(turn!==coachTurn||workout?.sessionId!==sessionId||state!==currentState||document.querySelector('.shell').dataset.screen!==view)return;
+    coachHistory.push({role:'assistant',content:result.reply});updateCoachHistory();speech.play(result.reply);
+  }catch(error){if(turn===coachTurn&&error.name!=='AbortError'&&document.querySelector('.shell').dataset.screen===view){voiceState='coach_error';voiceCaption=error.message;coachError={input:message,message:error.message};voiceUI();updateCoachHistory()}}
+  finally{if(coachRequest===request){coachBusy=false;coachRequest=null;updateCoachHistory()}}
+}
+async function coachPage(){
+  const epoch=++coachTurn;coachRequest?.abort();coachBusy=false;clearInterval(timer);stopCadence();stopListening();speech.stop();voiceEnabled=false;voiceInputTarget='coach';voiceState='idle';voiceCaption='可以直接输入，也可以点击麦克风和我说话。';
+  setNav('training');document.querySelector('.shell').dataset.screen='coach';
+  app.innerHTML=`<section class="coach-screen"><div class="plan-nav"><button class="ghost" id="coach-back">返回首页</button><button class="ghost" id="configure-coach">模型设置</button></div><div class="home-copy"><div class="eyebrow">你的训练教练</div><h1>说说你现在的想法</h1><p id="coach-connection" role="status">正在检查模型配置…</p></div><div id="coach-history" class="coach-history" role="log" aria-live="polite"></div><div class="coach-compose"><div id="voice-status" class="voice-status"></div><p id="voice-caption" class="voice-caption" aria-live="polite"></p><button id="mic" class="secondary">与教练说话</button><form id="coach-form" class="coach-form"><input id="coach-input" aria-label="与教练对话" maxlength="500" placeholder="想问训练，或聊聊今天都可以"><button>发送</button></form></div></section>`;
+  updateCoachHistory();voiceUI();document.querySelector('#coach-back').onclick=home;document.querySelector('#configure-coach').onclick=coachSettings;document.querySelector('#mic').onclick=toggleListening;
+  document.querySelector('#coach-form').onsubmit=e=>{e.preventDefault();const input=document.querySelector('#coach-input'),text=input.value.trim();if(text){input.value='';handleCoachInput(text,false,'touch')}};
+  try{const status=await api('/api/coach/settings');if(epoch!==coachTurn||document.querySelector('.shell').dataset.screen!=='coach')return;document.querySelector('#coach-connection').textContent=status.configured?`已配置 ${status.model}，可以开始聊天。`:'自由对话需要先连接语言模型，请点击“模型设置”。'}catch(error){const status=document.querySelector('#coach-connection');if(status)status.textContent=error.message}
+}
+async function coachSettings(returnToTraining=false){
+  coachTurn++;coachRequest?.abort();coachBusy=false;clearInterval(timer);stopCadence();stopListening();speech.stop();voiceEnabled=false;setNav('profile');document.querySelector('.shell').dataset.screen='coach-settings';
+  app.innerHTML=`<section class="coach-settings"><div class="plan-nav"><button class="ghost" id="settings-back">返回</button><span>教练模型设置</span></div><h1>连接你的对话模型</h1><p class="light-sub">对话与当前训练计划、进度会发送到所选服务。密钥在本机加密保存。</p><div class="model-actions"><button type="button" class="secondary" id="preset-tencent">腾讯云普通调用</button><button type="button" class="secondary" id="preset-tencent-plan">腾讯云 Token Plan</button><button type="button" class="secondary" id="preset-company">公司内部模型</button></div><form id="model-settings"><label for="model-url">接口地址（Base URL）</label><input id="model-url" type="url" required placeholder="https://ai-maas.zen5prod.com/ai-router" autocomplete="off"><label for="model-protocol">接口格式</label><select id="model-protocol"><option value="tencent">腾讯云 TokenHub（DeepSeek 快速回复）</option><option value="openai">OpenAI 兼容 /chat/completions</option><option value="ollama">Ollama /api/chat</option></select><label for="model-name">模型名</label><input id="model-name" list="internal-models" placeholder="deepseek-v4-flash 或服务提供的模型名" autocomplete="off"><datalist id="internal-models"></datalist><label for="model-key">API Key（腾讯云必填；内部无鉴权服务可留空）</label><input id="model-key" type="password" autocomplete="off" placeholder="仅保存在本机服务端"><label class="clear-model-key"><input id="clear-model-key" type="checkbox">清除已保存的密钥</label><p class="home-suggestion" id="model-key-status">密钥不会显示在页面或存入浏览器。</p><div class="model-actions"><button type="button" class="secondary" id="load-models">读取模型列表</button><button type="button" class="secondary" id="test-model">保存并测试连接</button></div><button class="primary" id="save-model">保存配置</button><p id="model-config-status" role="status" aria-live="polite">正在读取配置…</p></form></section>`;
+  document.querySelector('#settings-back').onclick=()=>returnToTraining==='profile'?profilePage():returnToTraining===true&&workout?render():coachPage();
+  const form=document.querySelector('#model-settings'),status=document.querySelector('#model-config-status'),key=document.querySelector('#model-key');
+  const display=config=>{document.querySelector('#model-key-status').textContent=config.keyConfigured?'已保存密钥；留空会保留原密钥。':'尚未保存密钥；服务要求鉴权时请填写。';document.querySelector('#clear-model-key').checked=false};
+  try{const config=await api('/api/coach/settings');if(!form.isConnected)return;document.querySelector('#model-url').value=config.baseUrl;document.querySelector('#model-name').value=config.model||(config.protocol==='tencent'?'deepseek-v4-flash':'');document.querySelector('#model-protocol').value=config.protocol;display(config);status.textContent=config.configured?'配置已保存，可以测试连接。':'填写 API Key 和模型名，再测试连接；可用模型以你的账户为准。'}catch(error){if(form.isConnected)status.textContent=error.message}
+  let busy=false;
+  const save=async()=>{const config=await api('/api/coach/settings',{baseUrl:document.querySelector('#model-url').value,model:document.querySelector('#model-name').value,protocol:document.querySelector('#model-protocol').value,apiKey:key.value,clearKey:document.querySelector('#clear-model-key').checked});key.value='';if(form.isConnected)display(config);return config};
+  const run=async action=>{if(busy||!form.reportValidity())return;busy=true;form.querySelectorAll('button').forEach(b=>b.disabled=true);status.textContent='正在保存配置…';try{const config=await save();if(!form.isConnected)return;if(action==='models'){status.textContent='正在读取模型列表…';const data=await api('/api/coach/models',{});if(!form.isConnected)return;document.querySelector('#internal-models').innerHTML=data.models.map(name=>`<option value="${esc(name)}"></option>`).join('');if(data.models.length===1)document.querySelector('#model-name').value=data.models[0];status.textContent=data.models.length?`已读取 ${data.models.length} 个模型，可在模型名输入框中选择；选好后保存配置。`:'服务没有返回模型列表，请手动填写模型名。'}else if(action==='test'){status.textContent='正在测试模型，可能需要等待一会儿…';const result=await api('/api/coach/test',{});if(form.isConnected)status.textContent=`连接成功：${result.reply}`}else status.textContent=config.configured?'配置已保存，可以返回教练开始聊天。':'配置已保存，请补齐模型名与该服务所需的 API Key。'}catch(error){if(form.isConnected)status.textContent=error.message}finally{busy=false;if(form.isConnected)form.querySelectorAll('button').forEach(b=>b.disabled=false)}};
+  const preset=(baseUrl,protocol,model)=>{if(busy)return;document.querySelector('#model-url').value=baseUrl;document.querySelector('#model-protocol').value=protocol;document.querySelector('#model-name').value=model;key.value='';document.querySelector('#internal-models').innerHTML='';status.textContent=protocol==='tencent'?(baseUrl.endsWith('/plan/v3')?'已选择腾讯云 Token Plan 套餐接口，请填写套餐对应的 Key，再保存并测试连接。':'已选择腾讯云普通调用接口。Token Plan 套餐的 Key 请使用“腾讯云 Token Plan”入口。'):'已填入公司内部地址。请确认模型名，连接公司网络后测试。';document.querySelector('#model-key-status').textContent='不同服务使用各自的密钥；切换地址后不会沿用旧服务的密钥。'};
+  document.querySelector('#preset-tencent').onclick=()=>preset('https://tokenhub.tencentmaas.com/v1','tencent','deepseek-v4-flash');document.querySelector('#preset-tencent-plan').onclick=()=>preset('https://tokenhub.tencentmaas.com/plan/v3','tencent','deepseek-v4-flash');document.querySelector('#preset-company').onclick=()=>preset('https://ai-maas.zen5prod.com/ai-router','openai','');
+  form.onsubmit=e=>{e.preventDefault();run('save')};document.querySelector('#test-model').onclick=()=>run('test');document.querySelector('#load-models').onclick=()=>run('models');
+}
+class WebSpeechTtsProvider{
+  constructor(){this.name='web-speech';this.epoch=0;this.utterances=new Set();this.lastText=''}
+  play(text,onDone){
+    this.stop();this.lastText=text;
+    const synth=window.speechSynthesis,epoch=this.epoch;
+    if(!synth||typeof SpeechSynthesisUtterance==='undefined'){voiceState='error';voiceCaption='此设备无法语音播报，可使用备用按钮继续。';voiceUI();return}
+    if(recognition)stopListening();
+    const utterance=new SpeechSynthesisUtterance(text);utterance.lang='zh-CN';utterance.volume=1;utterance.rate=1;
+    const voices=synth.getVoices(),voice=voices.find(v=>/^zh[-_](CN|Hans)/i.test(v.lang))??voices.find(v=>/^zh/i.test(v.lang));if(voice)utterance.voice=voice;
+    this.utterances.add(utterance);
+    utterance.onstart=()=>{if(epoch!==this.epoch)return;voiceState='speaking';voiceCaption=text;voiceUI()};
+    utterance.onend=()=>{this.utterances.delete(utterance);if(epoch!==this.epoch)return;voiceState='idle';voiceUI();onDone?.();scheduleAutoListen()};
+    utterance.onerror=e=>{this.utterances.delete(utterance);if(epoch!==this.epoch||e.error==='canceled'||e.error==='interrupted')return;voiceLog('tts_error',{error:e.error});voiceState='error';voiceCaption='语音播放失败；可以使用备用按钮继续训练。';voiceUI();scheduleAutoListen()};
+    synth.resume();synth.speak(utterance);
+  }
+  pause(){window.speechSynthesis?.pause()}
+  resume(){window.speechSynthesis?.resume()}
+  stop(){this.epoch++;window.speechSynthesis?.cancel();this.utterances.clear();if(voiceState==='speaking')voiceState='idle'}
+}
+class SpeechQueue{
+  constructor(provider){this.provider=provider}
+  play(text,onDone){if(document.hidden||lifecycleSuspended)return;try{this.provider.play(text,onDone)}catch(error){voiceState='error';voiceCaption=text;voiceLog('tts_error',{error:String(error)});voiceUI();scheduleAutoListen()}}
+  pause(){this.provider.pause()}
+  resume(){this.provider.resume()}
+  stop(){this.provider.stop()}
+}
+class NetworkTtsProvider{
+  constructor(){this.name='network-tts';this.epoch=0;this.audio=null;this.lastText='';this.available=true;this.url=null}
+  play(text,onDone){
+    this.stop();this.lastText=text;const epoch=this.epoch;
+    if(recognition)stopListening();
+    const fallback=()=>{if(epoch!==this.epoch)return;this.epoch++;webSpeechTts.play(text,onDone)};
+    if(!this.available)return fallback();
+    voiceState='processing';voiceCaption=text;voiceUI();
+    // D7(2026-11-09):上游慢时 voiceState 会一直停在 processing,scheduleAutoListen 被无限推迟
+    // (这段时间用户说话完全没反应)。加 8 秒超时,超时走本地合成兜底。
+    fetch('/api/voice/tts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:speakDigits(text)}),signal:AbortSignal.timeout(8000)})
+      .then(async response=>{
+        if(epoch!==this.epoch)return;
+        if(response.status===503){this.available=false;throw Error('tts_unconfigured')}
+        if(!response.ok)throw Error('tts_http_'+response.status);
+        const blob=await response.blob(),url=URL.createObjectURL(blob),audio=new Audio(url);
+        this.audio=audio;this.url=url;
+        audio.onended=()=>{URL.revokeObjectURL(url);this.url=null;if(epoch!==this.epoch)return;this.audio=null;voiceState='idle';voiceUI();onDone?.();scheduleAutoListen()};
+        audio.onerror=()=>{URL.revokeObjectURL(url);this.url=null;fallback()};
+        voiceState='speaking';voiceUI();
+        await audio.play();
+      })
+      .catch(()=>fallback());
+  }
+  pause(){this.audio?.pause()}
+  resume(){this.audio?.play()}
+  stop(){this.epoch++;if(this.audio){try{this.audio.pause();this.audio.removeAttribute('src')}catch{}this.audio=null}
+    // D7:被打断的播报要把 blob URL 还回去,否则长会话里一直泄漏
+    if(this.url){try{URL.revokeObjectURL(this.url)}catch{}this.url=null}
+    if(voiceState==='speaking'||voiceState==='processing')voiceState='idle'}
+}
+const webSpeechTts=new WebSpeechTtsProvider();
+const speech=new SpeechQueue(new NetworkTtsProvider());
+
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(path,body,retry=true,signal,keepalive=false){const headers={'content-type':'application/json'},key=localStorage.getItem('trainmind-mobile-key');if(key)headers['x-mobile-key']=key;const r0=signal??AbortSignal.timeout(15000);let r;try{r=await fetch(path,{method:body?'POST':'GET',headers,body:body?JSON.stringify(body):undefined,signal:r0,keepalive})}catch(error){const name=error?.name??'';const wrapped=Error(name==='AbortError'?(signal?'请求已取消。':'网络超时，请重试。'):name==='TimeoutError'?'网络超时，请重试。':'网络不可用，请检查连接后重试。');wrapped.name=name;throw wrapped}if(r.status===401&&retry&&!document.hidden){const entered=prompt('请输入 TrainMind 终端显示的本次移动测试口令。');if(entered){localStorage.setItem('trainmind-mobile-key',entered);return api(path,body,false,signal)}}const data=await r.json();if(!r.ok)throw Error(data.error||data.safety?.message||data.interpretation?.clarificationQuestions?.join(' ')||data.interpretation?.errors?.join(' ')||'请求失败');return data}
+function experienceControls(){if(!workout?.experience)return'';return`<div class="row actions" style="margin-top:16px"><span class="eyebrow">${esc(workout.experience.mode)} · ${esc(workout.experience.topic)} · ${esc(workout.experience.talkativeness)}</span><button class="ghost" data-xp="${workout.experience.enabled?'off':'resume'}">${workout.experience.enabled?'内容关':'继续刚才的'}</button><button class="ghost" data-xp="skip">换一个</button><button class="ghost" data-xp="less">少说一点</button><button class="ghost" data-xp="more">多说一点</button></div>`}
+function bindExperience(){document.querySelectorAll('[data-xp]').forEach(b=>b.onclick=()=>experience(b.dataset.xp))}
+async function experience(command){const stamp=viewStamp(),d=await api(`/api/workouts/${workout.sessionId}/experience`,{command});if(!currentView(stamp)||['completed','aborted'].includes(workout.status))return;setWorkout(d.workout);handleDirective(d.directive);render()}
+function handleDirective(d){if(!d)return;if(d.action==='stop')speech.stop();else if(d.action==='pause')speech.pause();else if(d.action==='play'&&d.text&&d.text!==lastSpoken){lastSpoken=d.text;speech.play(d.text)}}
+async function syncExperience(stamp=viewStamp()){if(!workout?.experience)return;try{const d=await api(`/api/workouts/${workout.sessionId}/experience`,{});if(!currentView(stamp)||['completed','aborted'].includes(workout.status))return;setWorkout(d.workout);handleDirective(d.directive)}catch{}}
+async function showPlanAlternatives(index){
+  try{
+    const sessionId=workout.sessionId,d=await api('/api/workouts/'+sessionId+'/alternatives?index='+index);if(workout?.sessionId!==sessionId||workout.status!=='preview')return;
+    const available=interpretation?.context?.availableEquipmentIds;
+    if(workout.environment!=='gym'&&available?.length)d.alternatives=d.alternatives.filter(x=>x.equipmentIds?.some(id=>available.includes(id)));
+    for(const alternative of d.alternatives)if(!/[\u4e00-\u9fff]/.test(alternative.instructions[0]??''))alternative.instructions=['同类动作 · 适合当前训练条件'];
+    const current=workout.exercises[index];document.querySelector('.shell').dataset.screen='plan';app.scrollTop=0;
+    app.innerHTML='<section class="tm-screen">'+designHeader('替换','换个适合你的动作','保留训练目标，换一种方式。')+'<div class="tm-stack">'+designCoach('intent','这些动作能保持相近的训练目标。选择适合你的一个。')+'<p class="home-suggestion">当前动作 · '+esc(current.name)+'</p><div class="tm-stack">'+(d.alternatives.length?d.alternatives.map((x,i)=>'<button class="tm-row'+(i===0?' selected-alternative':'')+'" data-exercise-id="'+esc(x.id)+'" aria-pressed="'+(i===0)+'"><span class="plan-thumb">'+workoutIcon()+'</span><div><strong>'+esc(x.name)+'</strong><small>'+esc(x.instructions[0]??'同类动作替代')+'</small></div></button>').join(''):'<div class="tm-empty">当前条件下没有合适的替代动作。</div>')+'</div><div id="error" role="alert"></div></div><div class="tm-footer"><button id="confirm-alternative" '+(!d.alternatives.length?'disabled':'')+'>确认替换</button><button id="close-alternatives" class="secondary">返回计划</button></div></section>';
+    let selected=d.alternatives[0]?.id;
+    document.querySelectorAll('[data-exercise-id]').forEach(b=>b.onclick=()=>{selected=b.dataset.exerciseId;document.querySelectorAll('[data-exercise-id]').forEach(x=>{x.classList.toggle('selected-alternative',x===b);x.setAttribute('aria-pressed',String(x===b))})});
+    document.querySelector('#close-alternatives').onclick=preview;document.querySelector('#confirm-alternative').onclick=()=>action('plan_replace',{index,exerciseId:selected});
+  }catch(error){alert(error.message)}
+}
+function designHeader(section,title,subtitle){return '<header class="tm-header"><div class="eyebrow">'+esc(section)+'</div><h1>'+esc(title)+'</h1><p>'+esc(subtitle)+'</p></header>'}
+const coachAssets={home:['d5f35',125],intent:['39cd6',90],plan:['08af3',85],player:['2df75',105],feedback:['a0f7d',155],rest:['bec5d',115],profile:['97a73',100],summary:['dca19',145],paused:['359a2',120]};
+function designCoach(kind,message){const [asset,size]=coachAssets[kind];return '<div class="tm-coach"><img src="/tm-'+asset+'.svg" width="'+size+'" height="'+size+'" alt="TrainMind 云朵教练"><div class="tm-coach-copy"><small>TrainMind 教练</small><strong>'+esc(message)+'</strong></div></div>'}
+function designMetric(value,label){return '<div class="tm-metric"><strong>'+esc(value)+'</strong><small>'+esc(label)+'</small></div>'}
+function workoutIcon(){return '<span class="workout-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M7 12h10M7 7v10M17 7v10M3 9v6M21 9v6M3 12h4m10 0h4"/></svg></span>'}
+const goalNames={back_strength:'背部力量',chest_strength:'胸部力量',upper_body:'上肢力量',lower_body:'下肢力量',general_fitness:'全身力量',mobility:'轻度恢复'};
+async function pauseLifecycleSession(snapshot){
+  for(let attempt=0;attempt<3;attempt++){
+    if(['paused','completed','aborted','preview'].includes(snapshot.status))return snapshot;
+    const d=await api(`/api/workouts/${snapshot.sessionId}/actions`,{type:'pause',context:eventContext(snapshot)},false,undefined,true);
+    snapshot=d.workout;if(!d.stale)return snapshot;
+  }
+  throw Error('状态仍在变化，请联网后重新确认暂停。');
+}
+function ensureLifecyclePause(reload=false){
+  const id=workout?.sessionId;if(!id||localStorage.getItem(suspendedSessionKey)!==id)return Promise.resolve();
+  if(lifecyclePausePromise?.sessionId===id)return lifecyclePausePromise;
+  lifecycleError='';
+  lifecyclePausePromise=(async()=>{
+    // Reload on recovery: an earlier keepalive request may have succeeded during page unload.
+    const snapshot=reload?(await api(`/api/workouts/${id}`,undefined,false)).workout:workout;
+    const saved=await pauseLifecycleSession(snapshot);if(workout?.sessionId===id)setWorkout(saved);
+  })().catch(error=>{if(workout?.sessionId===id)lifecycleError='暂停尚未确认保存。请联网后点击继续，先同步状态。';voiceLog('lifecycle_pause_error',{sessionId:id,error:error.message})})
+    .finally(()=>{if(lifecyclePausePromise?.sessionId===id)lifecyclePausePromise=null;if(!document.hidden&&workout?.sessionId===id){if(document.querySelector('.shell').dataset.screen==='exercise')render();else updateContinueCard()}});
+  lifecyclePausePromise.sessionId=id;
+  return lifecyclePausePromise;
+}
+function suspendTraining(){
+  if(!workout||!['warming_up','exercise_active','set_feedback','resting','cooling_down','paused'].includes(workout.status))return;
+  if(lifecycleSuspended)return;
+  lifecycleSuspended=true;localStorage.setItem(suspendedSessionKey,workout.sessionId);
+  pageGeneration++;actionGeneration++;actionBusy=false;coachTurn++;coachRequest?.abort();coachBusy=false;
+  clearInterval(timer);stopCadence();voiceEnabled=false;stopListening();speech.stop();
+  ensureLifecyclePause();
+}
+function restoreTraining(){
+  if(document.hidden||!workout||localStorage.getItem(suspendedSessionKey)!==workout.sessionId)return;
+  lifecycleSuspended=true;voiceEnabled=false;ensureLifecyclePause(true);
+}
+async function resumeAfterLifecycle(){
+  const id=workout?.sessionId;await ensureLifecyclePause(true);
+  if(document.hidden||workout?.sessionId!==id||document.querySelector('.shell').dataset.screen!=='exercise')return;
+  if(lifecycleError||workout.status!=='paused'){render();return}
+  if(workout.runtime.coach?.safetyStopped)return;
+  lifecycleSuspended=false;primeVoiceFromGesture();const d=await action('resume');
+  if(d&&!d.stale&&d.workout.status!=='paused')localStorage.removeItem(suspendedSessionKey);
+  else{lifecycleSuspended=true;voiceEnabled=false;stopListening();speech.stop();render()}
+}
+document.addEventListener('visibilitychange',()=>document.hidden?suspendTraining():restoreTraining());
+window.addEventListener('pagehide',suspendTraining);
+window.addEventListener('pageshow',restoreTraining);
+function leaveTrainingView(){pageGeneration++;actionGeneration++;actionBusy=false;coachTurn++;coachRequest?.abort();coachRequest=null;coachBusy=false;clearInterval(timer);stopCadence();voiceEnabled=false;stopListening();speech.stop();document.querySelector('.shell').dataset.view=''}
+function preview(){
+  document.querySelector('.shell').dataset.view='';
+  const recovery=interpretation?.context?.recovery?.overall,description=recovery==='fatigued'||recovery==='very_fatigued'?'今天有些疲劳，已适当降低训练量。':'根据你的状态，安排了'+(goalNames[workout.goal]??'今日')+'训练。';
+  app.innerHTML='<section class="tm-screen plan-screen"><button class="back-link secondary" id="plan-back">← 返回计划</button>'+designHeader('计划',editingPlan?'调整训练计划':'你的今日训练计划',editingPlan?'按你的节奏，调整动作与顺序。':description)+'<div class="tm-stack"><div class="plan-overview">'+designMetric(workout.plannedDurationMinutes+' min','预计时长')+designMetric(workout.exercises.length,'训练动作')+designMetric(labels[workout.intensity]??'适量','强度')+'</div>'+designCoach('plan',workout.exercises[0]?.recommendation?.userExplanation??'先热身，再逐步发力。按适合你的节奏完成。')+(workout.safetyNotes?.length?'<div class="tm-note lavender"><strong>已注意你的身体状态</strong><p>'+esc(workout.safetyNotes[0])+'</p></div>':'')+'<div class="plan-list">'+workout.exercises.map((x,i)=>'<article class="plan-row"><div class="plan-thumb">'+workoutIcon()+'</div><div class="plan-info"><strong>'+esc(x.name)+'</strong><small>'+x.sets+' 组 × '+esc(doseText(x))+' · 休息 '+x.restSeconds+' 秒</small></div>'+(editingPlan?'<div class="plan-edit-actions"><button data-plan="up" data-index="'+i+'" '+(i===0?'disabled':'')+'>上移</button><button data-plan="down" data-index="'+i+'" '+(i===workout.exercises.length-1?'disabled':'')+'>下移</button><button data-plan="replace" data-index="'+i+'">替换</button><button data-plan="remove" data-index="'+i+'">删除</button></div>':'<button type="button" class="plan-chevron" data-plan-info="'+i+'" aria-label="查看'+esc(x.name)+'动作要点" aria-expanded="false" aria-controls="plan-detail-'+i+'">›</button>')+'<div id="plan-detail-'+i+'" class="plan-detail" hidden><p>'+esc(doseExplanation(x))+'</p><ol>'+x.instructions.map(line=>'<li>'+esc(line)+'</li>').join('')+'</ol></div></article>').join('')+'</div><details class="plan-voice"><summary>语音提示与训练条件</summary><button id="voice-test">试听语音提示</button><p id="plan-voice-status">开始训练后会播报动作、休息和反馈提示。</p><button id="back-home">修改训练条件</button></details></div><div class="plan-footer"><button class="secondary" id="edit-plan">'+(editingPlan?'完成编辑':'调整计划')+'</button><button id="start">开始训练</button></div></section>';
+  document.querySelector('#plan-back').onclick=()=>trainingHub(true);
+  document.querySelectorAll('[data-plan-info]').forEach(button=>button.onclick=()=>{const detail=document.querySelector('#plan-detail-'+button.dataset.planInfo);detail.hidden=!detail.hidden;button.setAttribute('aria-expanded',String(!detail.hidden));button.textContent=detail.hidden?'›':'⌄'});
+  document.querySelector('#back-home').onclick=()=>{const input=workout.rawInput??interpretation?.context?.rawInput??'';editingPlan=false;home(true);document.querySelector('#prompt').value=input;document.querySelector('#prompt').dispatchEvent(new Event('input'))};
+  document.querySelector('#voice-test').onclick=()=>{document.querySelector('#plan-voice-status').textContent='正在试听语音提示…';primeVoiceFromGesture()};
+  document.querySelector('#start').onclick=()=>{primeVoiceFromGesture();action('start',{coach:true})};
+  document.querySelector('#edit-plan').onclick=()=>{editingPlan=!editingPlan;preview()};
+  if(editingPlan){
+    document.querySelector('.plan-list').insertAdjacentHTML('afterbegin','<button class="secondary" id="restore-plan">恢复建议动作</button>');
+    document.querySelector('#restore-plan').onclick=()=>action('plan_restore');
+    document.querySelectorAll('[data-plan]').forEach(b=>b.onclick=()=>{const index=Number(b.dataset.index),kind=b.dataset.plan;if(kind==='replace')return showPlanAlternatives(index);return action(kind==='up'||kind==='down'?'plan_move':'plan_remove',{index,direction:kind==='up'?-1:1})});
+  }
+}
+function coachCard(){
+  const kind=workout.status==='resting'?'rest':'player',[asset,size]=coachAssets[kind];
+  return '<section class="coach-card"><img src="/tm-'+asset+'.svg" width="'+size+'" height="'+size+'" alt="TrainMind 云朵教练"><div class="coach-copy"><div class="coach-label">TrainMind 教练</div><div id="voice-status" class="voice-status" role="status"></div><p id="voice-caption" class="voice-caption" aria-live="polite"></p></div></section>'
+}
+function bindCoachCard(){voiceUI();const mic=document.querySelector('#mic'),replay=document.querySelector('#replay-cue');if(mic)mic.onclick=toggleListening;if(replay)replay.onclick=()=>{speech.stop();speech.play(speech.provider.lastText||lastTrainingCue)}}
+function bindSetCompletion(){
+  const track=document.querySelector('.swipe-complete'),handle=document.querySelector('#done');let pointer=null,start=0,distance=0,limit=0,submitted=false;
+  const reset=()=>{pointer=null;distance=0;track.classList.remove('dragging');track.style.setProperty('--swipe-x','0px')};
+  const complete=()=>{if(submitted||actionBusy||workout?.status!=='exercise_active')return;submitted=true;handle.disabled=true;const tapBtn=document.querySelector('#done-tap');if(tapBtn)tapBtn.disabled=true;action('complete_set',completionReps()).finally(()=>{if(handle.isConnected&&workout?.status==='exercise_active'){submitted=false;handle.disabled=false;if(tapBtn)tapBtn.disabled=false}})};
+  handle.onpointerdown=e=>{if(submitted||e.button>0)return;pointer=e.pointerId;start=e.clientX;limit=Math.max(1,track.clientWidth-handle.offsetWidth-10);track.classList.add('dragging');if(e.isTrusted)handle.setPointerCapture(e.pointerId)};
+  handle.onpointermove=e=>{if(e.pointerId!==pointer)return;distance=Math.min(limit,Math.max(0,e.clientX-start));track.style.setProperty('--swipe-x',`${distance}px`)};
+  handle.onpointerup=e=>{if(e.pointerId!==pointer)return;const finished=distance>=limit*.85;reset();if(finished)complete()};
+  handle.onpointercancel=reset;handle.onlostpointercapture=reset;
+  handle.onclick=e=>{if(e.detail===0)complete()};const tapBtn=document.querySelector('#done-tap');if(tapBtn)tapBtn.onclick=complete;
+}
+function exercise(){
+  const x=workout.exercises[workout.runtime.currentExerciseIndex],done=x.completedSets,total=x.sets,progress=Math.min(100,Math.max(0,done/total*100));
+  app.innerHTML='<section class="workout-screen"><header class="workout-head"><div class="eyebrow">训练</div><h1>'+esc(x.name)+'</h1><small>动作 '+(workout.runtime.currentExerciseIndex+1)+' / '+workout.exercises.length+' · 第 '+workout.runtime.currentSetNumber+' 组 / 共 '+total+' 组</small><button class="exit" id="abort">结束训练</button></header><section class="workout-console"><p class="progress-label">当前动作 · 已完成 '+done+' / '+total+' 组</p><div class="compact-progress" aria-label="当前动作已完成 '+done+' 组，共 '+total+' 组"><span style="--progress:'+progress+'%"></span></div><div class="tm-ring"><svg viewBox="0 0 170 170" aria-hidden="true"><circle cx="85" cy="85" r="76" fill="none" stroke="#f2ebe3" stroke-width="12"/><circle class="ring-arc" cx="85" cy="85" r="76" fill="none" stroke="#ff6848" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 477.5" transform="rotate(-90 85 85)"/></svg><div class="tm-ring-copy"><strong id="rep-display">'+esc(displayTarget(x))+'</strong><small id="rep-display-label">本组目标 · '+esc(doseText(x))+'</small></div></div></section>'+coachCard()+'<div class="set-prescription"><span>第 '+workout.runtime.currentSetNumber+' 组</span><span>'+esc(doseText(x))+'</span><span>'+(x.currentWeight?x.currentWeight+' kg':'自重')+'</span></div><details class="training-voice-tools"><summary>语音陪练与动作要点</summary><div class="voice-controls"><button id="replay-cue" class="secondary">重播提示</button><button id="mic" class="secondary">与教练说话</button></div><p class="home-suggestion">说「暂停」「太重了」或「换个动作」</p><details class="movement-details"><summary>次数说明与动作要点</summary><p>'+esc(doseExplanation(x))+'</p><ol>'+x.instructions.map(line=>'<li>'+esc(line)+'</li>').join('')+'</ol></details><div class="set-tools"><button id="replace-exercise">替换动作</button><button id="skip-exercise">跳过此动作</button></div><div class="cadence-line"><strong id="cadence-count"></strong></div><div class="voice-controls"><button id="cadence-toggle" class="secondary">陪我报数</button></div><div class="cadence-options" hidden><span class="cadence-beat" aria-hidden="true"></span><label for="cadence-speed">快一些</label><input id="cadence-speed" type="range" min="1.5" max="6" step="0.5" aria-label="报数间隔，秒"><span>慢一些</span><output id="cadence-interval"></output></div></details><div class="set-completion"><div class="swipe-complete"><span>滑动完成这一组</span><button id="done" aria-label="向右拖动完成本组，或按回车键">→</button></div><div class="set-secondary-actions"><button id="done-tap" class="secondary">点击完成</button><button id="pause" class="secondary">暂停训练</button></div></div></section>';
+  bindCoachCard();bindSetCompletion();
+  document.querySelector('#cadence-toggle').hidden=x.repOrTimeBased==='time';document.querySelector('#cadence-speed').value=cadenceMs/1000;document.querySelector('#cadence-speed').oninput=e=>setCadenceSpeed(e.target.value);document.querySelector('#cadence-toggle').onclick=toggleCadence;
+  document.querySelector('#pause').onclick=()=>action('pause');document.querySelector('#abort').onclick=()=>action('abort');document.querySelector('#replace-exercise').onclick=()=>action('replace',{reason:'user_request'});document.querySelector('#skip-exercise').onclick=()=>action('skip',{reason:'user_request'});beginCadence();
+}
+function feedback(){
+  const x=workout.exercises[workout.runtime.currentExerciseIndex];
+  app.innerHTML='<section class="feedback-screen">'+designHeader('反馈','这一组做完了','想调整就点一项；不调整直接继续。')+designCoach('feedback','这一组完成了，想调整就点下面。')+'<section class="card"><div class="feedbacks">'+[['too_light','轻松，可以加一点','下组适当增加难度'],['right','刚刚好','保持当前强度'],['hard','有点吃力','减少次数或降低负重'],['failed','做不完','按实际完成情况调整'],['pain','出现不适','停止当前动作并调整计划']].map(([v,l,h])=>'<button data-feedback="'+v+'">'+l+'<small>'+h+'</small></button>').join('')+'</div><details class="feedback-correction"><summary>'+(countedReps()!==null?'系统记录了 '+countedReps()+' 次 · 要更正点这里':'确认实际次数和重量')+'</summary><div class="row"><label>实际次数 <input id="reps" type="number" min="0" value="'+((countedReps()??x.targetReps.match(/\d+/)?.[0])||10)+'"></label><label>实际重量 <input id="weight" type="number" min="0" step="0.5" value="'+(x.currentWeight??0)+'"></label></div></details><div class="feedback-voice"><div id="voice-status" class="voice-status" role="status"></div><p id="voice-caption" class="voice-caption" aria-live="polite"></p><button id="mic" class="secondary">与教练说话</button></div><div id="error" role="alert"></div></section><div class="tm-footer"><button id="submit">保持强度，开始休息</button><button id="report-pain" class="secondary">出现不适</button></div></section>';
+  voiceUI();if(!workout.runtime.coach)speech.play('这一组完成了。');document.querySelector('#mic').onclick=toggleListening;
+  let selected='right';
+  document.querySelectorAll('[data-feedback]').forEach(b=>b.onclick=()=>{voiceLog('manual_fallback',{reason:'feedback_button'});selected=b.dataset.feedback;document.querySelectorAll('[data-feedback]').forEach(x=>x.classList.toggle('selected',x===b));document.querySelector('#submit').click()});
+  document.querySelector('#report-pain').onclick=()=>document.querySelector('[data-feedback="pain"]').click();
+  document.querySelector('#submit').onclick=()=>{const correction=document.querySelector('.feedback-correction[open]'),data={feedback:selected},systemReps=countedReps(),typed=+document.querySelector('#reps').value,useTyped=correction||systemReps===null;data.actualReps=useTyped?typed:systemReps;data.actualWeight=+document.querySelector('#weight').value;data.actualRepsSource=useTyped&&typed!==systemReps?'reported':(repsSource()??'reported');actualRepsOverride=null;action('feedback',data)};
+}
+function resting(){
+  const restCue=pendingRestCue||'这一组完成了，开始休息。';pendingRestCue='';let warned=false,restMax=0;
+  // D5(2026-11-09):倒计时到 0 不再依赖"识别不在跑 / 教练不在说话"。
+  // 旧逻辑三个条件串在一起,而休息期间自动聆听几乎常驻 → left===0 那一秒大概率被
+  // recognition 挡掉,可 timer 已经被 clearInterval 不再重来,界面永久停在 00:00,
+  // 用户只能手动点"开始下一组"。现在:到 0 立即清 timer,给识别最多 3 秒收尾,
+  // 然后提交;失败重试 3 次并给可见提示。
+  let restDone=false,lastAnnounced=-1;
+  const advanceRest=async()=>{
+    for(let wait=0;wait<6&&recognition;wait++)await new Promise(r=>setTimeout(r,500));
+    for(let attempt=0;attempt<3;attempt++){
+      if(workout?.status!=='resting')return;
+      await action('rest_complete',{},'auto');
+      if(workout?.status!=='resting')return;
+      await new Promise(r=>setTimeout(r,1000));
+    }
+    voiceState='idle';voiceCaption='休息结束未能提交，请点「开始下一组」。';voiceUI();
+  };
+  const draw=()=>{const left=Math.max(0,Math.ceil((Date.parse(workout.runtime.restEndsAt)-Date.now())/1000));const node=document.querySelector('#seconds');if(node)node.textContent=Math.floor(left/60).toString().padStart(2,'0')+':'+(left%60).toString().padStart(2,'0');{if(left>restMax)restMax=left;setRingProgress(restMax>0?left/restMax:0)}if(left<=10&&left>0&&!warned){warned=true;speech.play('还剩 '+left+' 秒，准备下一组。')}
+    // D12(2026-11-09):倒计时每秒改写对读屏是噪音,又不该完全听不到 —— 每 30 秒礼貌播报一次。
+    if(left>0&&left%30===0&&left!==lastAnnounced){lastAnnounced=left;const ann=document.querySelector('#rest-announce');if(ann)ann.textContent=`休息还剩 ${left} 秒`}
+    if(left===0&&!restDone){restDone=true;clearInterval(timer);timer=null;advanceRest()}}
+  const x=workout.exercises[workout.runtime.currentExerciseIndex],completed=x.completedSets>0?x:workout.exercises[workout.runtime.currentExerciseIndex-1];
+  app.innerHTML='<section class="resting-screen"><header class="workout-head"><div class="eyebrow">休息</div><h1>组间休息</h1><small>'+(completed?esc(completed.name)+' · 已完成 '+completed.completedSets+' / '+completed.sets+' 组':'本组已记录')+'</small></header><div class="tm-stack"><div class="workout-console rest-console"><div class="tm-ring"><svg viewBox="0 0 170 170" aria-hidden="true"><circle cx="85" cy="85" r="76" fill="none" stroke="#f2ebe3" stroke-width="12"/><circle class="ring-arc" cx="85" cy="85" r="76" fill="none" stroke="#ff6848" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 477.5" transform="rotate(-90 85 85)"/></svg><div class="tm-ring-copy"><strong id="seconds" aria-live="off">--:--</strong><small>剩余休息</small><p id="rest-announce" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap"></p></div></div></div>'+coachCard()+(workout.runtime.coach?.pendingAgency?(workout.runtime.coach.pendingAgency.scope==='exercise'
+?'<section class="agency-card" style="background:var(--peach);border-radius:20px;padding:16px;margin:12px 0"><strong style="display:block;font-size:15px;margin-bottom:8px">下一个动作怎么走?</strong><div style="display:flex;flex-direction:column;gap:8px"><button data-agency="next_down">「下一个轻一点」 <small style="color:var(--muted);font-weight:400">下一动作降一档</small></button><button data-agency="stay">「按原计划走」 <small style="color:var(--muted);font-weight:400">相信原计划</small></button><button data-agency="skip_next">「少练一个」 <small style="color:var(--muted);font-weight:400">砍掉下一个动作</small></button></div></section>'
+:'<section class="agency-card" style="background:var(--peach);border-radius:20px;padding:16px;margin:12px 0"><strong style="display:block;font-size:15px;margin-bottom:8px">下一组怎么走?</strong><div style="display:flex;flex-direction:column;gap:8px"><button data-agency="accept_cut">'+(x.currentWeight?'「行,降点重量」':'「行,减一次」')+' <small style="color:var(--muted);font-weight:400">标准降档</small></button><button data-agency="hold_on">「不行,我能行」 <small style="color:var(--muted);font-weight:400">重量不变,目标定在你实际做的次数</small></button><button data-agency="bargain">「少做几次总行吧」 <small style="color:var(--muted);font-weight:400">次数-2,重量不让</small></button></div></section>'):'')+'<section class="rest-card"><strong>下一组 · '+esc(x.name)+'</strong><p>第 '+workout.runtime.currentSetNumber+' 组 / '+x.sets+' 组 · '+esc(doseText(x))+' · '+(x.currentWeight?x.currentWeight+' kg':'自重')+'</p></section><div class="rest-actions"><button id="plus">＋15 秒</button><button id="skip-rest">跳过休息</button><button id="breathing">呼吸提示</button></div><details class="rest-chat training-voice-tools"><summary>与教练交流</summary><div class="voice-controls"><button id="replay-cue" class="secondary">重播提示</button><button id="mic" class="secondary">与教练说话</button></div></details><p class="home-suggestion">可以说「多休息30秒」「下一组」或「暂停」。</p></div><div class="tm-footer"><button id="next">开始下一组</button><button id="pause" class="secondary">暂停训练</button></div></section>';
+  bindCoachCard();speech.play(restCue);draw();timer=setInterval(draw,1000);document.querySelector('#next').onclick=()=>action('rest_complete');document.querySelectorAll('[data-agency]').forEach(b=>b.onclick=()=>action('coach_event',{event:{type:'agency_choice',choice:b.dataset.agency}}));
+  document.querySelector('#skip-rest').onclick=()=>action('rest_complete');document.querySelector('#plus').onclick=()=>action('extend_rest',{seconds:15});document.querySelector('#pause').onclick=()=>action('pause');document.querySelector('#breathing').onclick=()=>speech.play('呼吸放慢，肩膀放松。按自己的节奏吸气，缓慢呼气。');
+}
+function timedPhase(){const warm=workout.status==='warming_up',title=warm?'跟我一起热身':'最后做放松',actionType=warm?'warmup_complete':'cooldown_complete';const phaseCue=pendingRestCue||(warm?'直接开始主训练。':'主体完成，放松呼吸，说“完成”结束。');pendingRestCue='';speech.play(phaseCue);const draw=()=>{const left=Math.max(0,Math.ceil((Date.parse(workout.runtime.phaseEndsAt)-Date.now())/1000)),node=document.querySelector('#seconds');if(node)node.textContent=left;if(left===0){clearInterval(timer);timer=null;action(actionType,{},'auto')}};app.innerHTML=`<section class="hero"><div class="eyebrow">${warm?'Warm up':'Cooldown'}</div><h1>${title}</h1><p>${warm?'直接开始主训练。':'训练主体完成，放慢呼吸；说“完成”可结束。'}</p><div id="voice-status" class="voice-status"></div><div id="voice-caption" class="voice-caption"></div><button id="mic" class="secondary">🎙 语音</button></section><section class="card player"><div class="timer"><span id="seconds">--</span><small style="font-size:18px"> 秒</small></div><div class="row actions"><button id="phase-next">${warm?'开始正式训练':'完成训练'}</button><button class="ghost" id="phase-pause">暂停</button></div></section>`;voiceUI();document.querySelector('#mic').onclick=toggleListening;draw();timer=setInterval(draw,1000);document.querySelector('#phase-next').onclick=()=>action(actionType);document.querySelector('#phase-pause').onclick=()=>action('pause')}
+function paused(){
+  const x=workout.exercises[workout.runtime.currentExerciseIndex];
+  const pT=Number(x?.targetReps.match(/\d+/g)?.at(-1)||8),pD=Math.min(pT,actualRepsOverride??guideRepCount);
+  const pausedRing=()=>'<div class="tm-ring"><svg viewBox="0 0 170 170" aria-hidden="true"><circle cx="85" cy="85" r="76" fill="none" stroke="#f2ebe3" stroke-width="12"/><circle class="ring-arc" cx="85" cy="85" r="76" fill="none" stroke="#ff6848" stroke-width="12" stroke-linecap="round" stroke-dasharray="'+(pD/pT*477.5).toFixed(1)+' 477.5" transform="rotate(-90 85 85)"/></svg><div class="tm-ring-copy"><strong>'+pD+'</strong><small>本组 '+pD+'/'+pT+' · 进度已保留</small></div></div>';
+  app.innerHTML='<section class="paused-screen">'+designHeader('暂停','训练已暂停','准备好后，我们继续。')+'<div class="tm-stack">'+pausedRing()+designCoach('paused','不用着急，按你的节奏来。')+'<div class="tm-note"><strong>训练进度已保留</strong><p>'+esc(x?.name??'训练')+' · 第 '+workout.runtime.currentSetNumber+' 组 / '+(x?.sets??0)+' 组</p></div><div class="feedback-voice"><div id="voice-status" class="voice-status"></div><p id="voice-caption" class="voice-caption"></p><button id="mic" class="secondary">与教练说话</button></div></div><div class="tm-footer"><button id="resume">继续训练</button><button id="paused-exit" class="secondary">结束训练</button></div></section>';
+  if(lifecycleSuspended){voiceState='idle';voiceCaption=lifecycleError||'页面离开后已停止陪练。请点击继续训练，确认恢复。';}voiceUI();if(lifecycleSuspended)document.querySelector('#mic').disabled=true;speech.play(workout.runtime.coach?.safetyStopped?'已因疼痛暂停。请先停止动作，可以说结束训练。':'训练已暂停。说“继续训练”即可恢复。');if(workout.runtime.coach?.safetyStopped)document.querySelector('#resume').disabled=true;document.querySelector('#resume').onclick=()=>lifecycleSuspended?resumeAfterLifecycle():action('resume');document.querySelector('#paused-exit').onclick=()=>action('abort');document.querySelector('#mic').onclick=()=>{if(recognition){voiceEnabled=false;stopListening()}else listen()};
+}
+let surveyStage='effort';function nextSurvey(group,value){if(!value){voiceState='idle';voiceCaption='没听清，请再说一次或点选。';voiceUI();scheduleAutoListen();return}const node=document.querySelector(`[data-answer="${group}"] [data-value="${value}"]`);if(!node)return;node.parentElement.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b===node));if(group==='effort'){surveyStage='muscle';speech.play('目标肌群感觉如何？说没什么感觉、有感觉，或感觉很强。')}else if(group==='muscle'){surveyStage='pain';speech.play('有没有疼痛？说没有、轻微或明显。')}else{surveyStage='done';speech.play('反馈已收到，正在保存。');saveCompletedSurvey()}}async function saveCompletedSurvey(){const value=g=>document.querySelector(`[data-answer="${g}"] .selected`)?.dataset.value,effort=Number(value('effort')),muscle=Number(value('muscle')),pain=value('pain');if(!effort||!muscle||!pain){document.querySelector('#error').innerHTML='<div class="error">请完成反馈，或点选屏幕选项。</div>';return}try{await api(`/api/workouts/${workout.sessionId}/survey`,{perceivedFatigue:effort,suitability:muscle,discomfort:pain!=='none',physicalFatigueScore:effort*2});voiceEnabled=false;speech.stop();setWorkout(null);recordsPage()}catch(x){document.querySelector('#error').innerHTML=`<div class="error">${esc(x.message)}</div>`}}
+function complete(){
+  clearInterval(timer);speech.stop();
+  const completed=workout.exercises.filter(x=>x.completedSets>0).length,sets=workout.exercises.reduce((n,x)=>n+x.completedSets,0),planned=workout.exercises.reduce((n,x)=>n+x.sets,0),rate=Math.round(sets/Math.max(1,planned)*100);
+  app.innerHTML='<section class="feedback-screen">'+designHeader('完成','练得很棒！','每一次完成，都是向前一步。')+'<div class="tm-stack">'+designCoach('summary','今天也完成了！为你的坚持鼓掌。')+'<div class="tm-metrics three">'+designMetric(Math.round(workout.runtime.activeWorkoutMs/60000)+' min','训练时长')+designMetric(completed+' / '+workout.exercises.length,'完成动作')+designMetric(sets,'完成组数')+'</div><div><p class="progress-label">今日计划完成度 · '+rate+'%</p><div class="compact-progress"><span style="--progress:'+rate+'%"></span></div></div><div class="tm-note lavender"><strong>教练复盘</strong><p>已记录本次完成的动作与组数。告诉我身体的感受，下次计划会更了解你。</p></div><details id="summary-survey"><summary>记录本次训练感受</summary><div class="survey-voice"><div id="voice-status" class="voice-status"></div><p id="voice-caption" class="voice-caption"></p><button id="mic" class="secondary">与教练说话</button></div><section class="feedback-section"><h2>今天整体强度如何？</h2><div class="effort-options" data-answer="effort">'+[['1','○','很轻松'],['2','◔','较轻松'],['3','◉','正好'],['4','◕','有点累'],['5','●','非常累']].map(([value,face,label])=>'<button type="button" data-value="'+value+'"><span>'+face+'</span>'+label+'</button>').join('')+'</div></section><section class="feedback-section"><h2>目标肌群有练到吗？</h2><div class="light-chips" data-answer="muscle"><button type="button" data-value="1">没什么感觉</button><button type="button" data-value="2">有感觉</button><button type="button" data-value="3">感觉很强</button></div></section><section class="feedback-section"><h2>有没有不适或疼痛？</h2><div class="light-chips" data-answer="pain"><button type="button" data-value="none">没有</button><button type="button" data-value="mild">轻微</button><button type="button" data-value="obvious">明显</button></div></section><button class="light-bottom" id="survey">完成反馈</button></details><div id="error" role="alert"></div></div><div class="tm-footer"><button id="summary-record">查看详细记录</button><button id="summary-home" class="secondary">回到首页</button></div></section>';
+  voiceUI();document.querySelector('#mic').onclick=toggleListening;document.querySelectorAll('[data-answer] button').forEach(b=>b.onclick=()=>nextSurvey(b.parentElement.dataset.answer,b.dataset.value));document.querySelector('#survey').onclick=saveCompletedSurvey;surveyStage='effort';
+  document.querySelector('#summary-survey').ontoggle=e=>{if(e.target.open)speech.play('整体训练强度请说1到5，1很轻松，5非常累。然后我会问训练感受和疼痛情况。')};
+  document.querySelector('#summary-home').onclick=home;
+  const sessionId=workout.sessionId;if(workout.runtime.coach)speech.play('本次训练完成，已保存你确认的训练记录。');document.querySelector('#summary-record').onclick=async()=>{try{const result=await api('/api/history?userId='+encodeURIComponent(userId)),entry=result.sessions.find(x=>x.workout.sessionId===sessionId);if(entry)recordDetail(entry);else recordsPage()}catch(error){document.querySelector('#error').innerHTML='<div class="error">'+esc(error.message)+'</div>'}};
+}
+function render(){const activeId=document.activeElement?.id||'';document.querySelector('.shell').dataset.view='';app.scrollTop=0;clearInterval(timer);stopCadence();stopListening();speech.stop();if(!['preview','exercise_active','set_feedback','resting','paused','cooling_down','completed'].includes(workout?.status)){voiceEnabled=false;stopListening()}if(workout?.status==='aborted')setWorkout(null);if(!workout)return home();setNav('training');document.querySelector('.shell').dataset.screen=workout.status==='preview'?'plan':['exercise_active','warming_up','cooling_down','set_feedback','resting','paused'].includes(workout.status)?'exercise':workout.status==='completed'?'complete':'default';if(lifecycleSuspended&&localStorage.getItem(suspendedSessionKey)===workout.sessionId){document.querySelector('.shell').dataset.screen='exercise';paused();return}({preview,warming_up:timedPhase,exercise_active:exercise,set_feedback:feedback,resting,cooling_down:timedPhase,paused,completed:complete}[workout.status]||home)();
+  bindCoachConversation();
+  // D12(2026-11-09):整屏 innerHTML 重建会把焦点丢回 body —— 键盘用户每完成一组都要从页首重新 Tab。
+  // 记住重建前的焦点 id,重建后同 id 还在就还给它(不滚动,避免打断看内容)。
+  if(activeId){const again=document.getElementById(activeId);if(again&&again!==document.activeElement){try{again.focus({preventScroll:true})}catch{again.focus()}}}
+}
+function adjustment(oldExercise,newExercise){
+  document.querySelector('.shell').dataset.screen='adjustment';app.scrollTop=0;
+  app.innerHTML='<section class="adjustment-screen">'+designHeader('替换','换个适合你的动作','已根据当前条件调整为同类动作。')+'<div class="tm-stack">'+designCoach('intent','换一种方式，继续按适合你的节奏训练。')+'<article class="tm-row"><span class="plan-thumb">'+workoutIcon()+'</span><div><strong>原动作 · '+esc(oldExercise.name)+'</strong><small>'+oldExercise.sets+' 组 × '+esc(doseText(oldExercise))+'</small></div></article><article class="tm-row selected-alternative"><span class="plan-thumb">'+workoutIcon()+'</span><div><strong>当前动作 · '+esc(newExercise.name)+'</strong><small>'+newExercise.sets+' 组 × '+esc(doseText(newExercise))+' · '+(newExercise.currentWeight?newExercise.currentWeight+' kg':'自重')+'</small></div></article><div class="tm-note"><strong>为什么推荐它？</strong><p>'+esc(newExercise.recommendation?.userExplanation??'替代动作符合当前训练目标。')+'</p></div><details class="movement-details"><summary>查看新动作要点</summary><ol>'+newExercise.instructions.map(line=>'<li>'+esc(line)+'</li>').join('')+'</ol></details></div><div class="tm-footer"><button id="continue-workout">继续训练</button></div></section>';
+  document.querySelector('#continue-workout').onclick=render;
+}
+async function action(type,extra={},source){
+  // D3(2026-11-09):actionBusy 时不再静默 return —— 慢网下一个请求在飞,用户再点
+  // "完成/不合适/疼痛"会被无声吞掉,界面看起来像坏了。这里至少给一句可见提示。
+  // (同时去掉 document.hidden 门槛:请求本身没问题,是否渲染交由 currentView 判断。)
+  if(!workout||(lifecycleSuspended&&!['resume','abort'].includes(type)))return;
+  if(actionBusy){voiceState='idle';voiceCaption='上一步还在提交，请稍候再试。';voiceUI();return}
+  actionBusy=true;const operation=++actionGeneration,stamp=viewStamp(),context=eventContext();
+  stopCadence();stopListening();speech.stop();coachTurn++;
+  try{
+    const oldExercise=type==='replace'?{...workout.exercises[workout.runtime.currentExerciseIndex]}:null;
+    const d=await api(`/api/workouts/${context.sessionId}/actions`,{type,...extra,context,...(source?{source}:{})});
+    if(!currentView(stamp)||operation!==actionGeneration)return;
+    setWorkout(d.workout);
+    if(d.stale){voiceState='idle';voiceCaption='训练状态已更新，请重新确认当前操作。';render();return}
+    if(type==='feedback'||type==='coach_message'){
+      if(d.setRecord)actualRepsOverride=null;
+      const words={too_light:'太轻',right:'正好',hard:'有点难',failed:'没有完成',pain:'疼痛'};
+      pendingRestCue=workout.status==='resting'?`收到，${words[extra.feedback]??'已记录'}。休息 ${Math.max(0,Math.ceil((Date.parse(workout.runtime.restEndsAt)-Date.now())/1000))} 秒。`:workout.status==='cooling_down'?'主训练完成。':'';
+    }
+    voiceState='idle';voiceCaption='';
+    if(!['completed','aborted'].includes(workout.status))await syncExperience(stamp);else speech.stop();
+    if(!currentView(stamp)||operation!==actionGeneration)return;
+    const current=workout.exercises[workout.runtime.currentExerciseIndex];
+    if(type==='coach_message'&&d.directive?.text&&workout.status==='exercise_active'){speech.play(d.directive.text);updateRepProgress();return d}
+    if(workout.status==='preview')preview();else if(oldExercise&&workout.status==='exercise_active'&&current?.exerciseId!==oldExercise.exerciseId)adjustment(oldExercise,current);else render();
+    if(d.directive?.text)speech.play(d.directive.text);return d;
+  }catch(x){if(currentView(stamp)&&operation===actionGeneration){voiceState='idle';voiceCaption=x.message;voiceUI();alert(x.message)}}
+  finally{if(operation===actionGeneration)actionBusy=false}
+}
+function setNav(tab){
+  pageGeneration++;app.scrollTop=0;
+  if(tab==='training'||tab==='profile')document.querySelector('.shell').dataset.screen='default';
+  document.querySelectorAll('[data-tab]').forEach(x=>{const active=x.dataset.tab===tab;x.classList.toggle('active',active);if(active)x.setAttribute('aria-current','page');else x.removeAttribute('aria-current')});
+}
+async function trainingHub(showOverview=false){
+  setNav('training');clearInterval(timer);stopCadence();voiceEnabled=false;stopListening();speech.stop();
+  const page=pageGeneration;
+  if(!workout){try{const {workout:active}=await api(`/api/workouts/active?userId=${encodeURIComponent(userId)}`);if(page!==pageGeneration)return;setWorkout(active)}catch{if(page!==pageGeneration)return}}
+  if(!showOverview&&workout&&['preview','warming_up','exercise_active','set_feedback','resting','paused','cooling_down'].includes(workout.status))return render();
+  app.innerHTML='<section class="tm-screen course-screen"><header class="tm-header"><div class="eyebrow">训练计划</div><h1>按你的节奏练</h1><p>安排一场训练，或用几周时间建立习惯。</p></header><div class="tm-stack"><div id="saved-workout"></div><button class="tm-row" id="go-home"><div><strong>单场训练</strong><small>根据今天的状态生成训练计划</small></div><span class="chevron">↗</span></button><h3>多周课程</h3><div id="program-card"><div class="tm-empty">正在读取课程…</div></div></div></section>';
+  updateContinueCard();document.querySelector('#go-home').onclick=()=>home(true);loadProgram();
+}
+// 多周课程:计划(模板)与执行(真实训练)分离,进度只认完成的场次
+async function loadProgram(){
+  const host=document.querySelector('#program-card');if(!host)return;
+  try{
+    const d=await api('/api/programs/active?userId='+encodeURIComponent(userId));if(!host.isConnected)return;
+    if(!d.program){
+      host.innerHTML='<div class="tm-note"><strong>还没有课程</strong><p>先选器械，再选周期——器械由你决定，教练不猜。</p><div class="chips" style="margin:10px 0"><button type="button" class="chip active" aria-pressed="true" data-eq="bodyweight">自重</button><button type="button" class="chip" aria-pressed="false" data-eq="dumbbell">哑铃</button><button type="button" class="chip" aria-pressed="false" data-eq="band">弹力带</button></div><div class="tm-inline"><button data-program="4x3">4 周 · 每周 3 次</button><button data-program="8x2">8 周 · 每周 2 次</button></div></div>';
+      host.querySelectorAll('[data-eq]').forEach(c=>c.onclick=()=>c.setAttribute('aria-pressed',String(c.classList.toggle('active'))));
+      host.querySelectorAll('[data-program]').forEach(b=>b.onclick=async()=>{
+        const [w,spw]=b.dataset.program.split('x');b.disabled=true;
+        const equipment=[...host.querySelectorAll('[data-eq].active')].map(x=>x.dataset.eq);
+        try{await api('/api/programs',{userId,goal:'全身力量',weeks:+w,sessionsPerWeek:+spw,environment:'home',targetMinutes:30,equipment:equipment.length?equipment:['bodyweight']});if(host.isConnected)await loadProgram()}catch(e){host.insertAdjacentHTML('beforeend','<div class="error">'+esc(e.message)+'</div>');b.disabled=false}
+      });
+      return;
+    }
+    const st=d.status;
+    host.innerHTML='<div class="tm-note lavender"><strong>'+esc(st.text)+'</strong><p>'+esc(d.program.title)+' · 下一场：'+esc(st.nextSession?st.nextSession.title:'课程已完成')+'</p>'+(st.nextSession?'<button id="start-program" style="margin-top:8px;width:100%">开始这一场</button>':'')+'</div>';
+    const start=host.querySelector('#start-program');
+    if(start)start.onclick=async()=>{
+      start.disabled=true;
+      try{const r=await api('/api/programs/'+encodeURIComponent(d.program.programId)+'/start',{userId});if(!host.isConnected)return;setWorkout(r.workout);render()}catch(e){host.insertAdjacentHTML('beforeend','<div class="error">'+esc(e.message)+'</div>');start.disabled=false}
+    };
+  }catch(e){host.innerHTML='<div class="error">'+esc(e.message)+'</div>'}
+}
+
+async function profilePage(){
+  leaveTrainingView();setNav('profile');document.querySelector('.shell').dataset.screen='profile';
+  app.innerHTML='<section class="profile-screen">'+designHeader('档案','我的训练档案','教练会根据你的偏好持续调整。')+'<p class="home-suggestion">正在读取档案…</p></section>';
+  const screen=document.querySelector('.profile-screen');
+  try{
+    const data=await api('/api/profile?userId='+encodeURIComponent(userId));if(!screen.isConnected)return;
+    const context=data.latestContext,known=Object.keys(data.trainingModel.exerciseCapabilities).length;
+    screen.innerHTML=designHeader('档案','我的训练档案','教练会根据你的偏好持续调整。')+'<div class="tm-stack">'+designCoach('profile','今天也要照顾好自己。适合你的节奏，才是最好的训练节奏。')+'<div class="tm-metrics">'+designMetric(data.trainingOverview.sessions,'完整场次')+designMetric(data.trainingOverview.sets,'完整场次组数')+'</div><div class="tm-profile-row"><strong>训练目标</strong><p>'+esc(({back:'背部力量',chest:'胸部力量',upper_body:'上肢力量',lower_body:'下肢力量',general:'全身力量',mobility:'轻度恢复'})[context?.goalContext?.type]??'根据每次训练需求安排')+'</p></div><div class="tm-profile-row"><strong>常用环境与器械</strong><p>'+esc(context?labels[context.environment]??'按本次环境安排':'还没有训练条件记录')+' · '+(context?.availableEquipmentIds?.length?context.availableEquipmentIds.map(id=>({bodyweight:'自重',dumbbell:'哑铃',barbell:'杠铃',resistance_band:'弹力带',kettlebell:'壶铃'})[id]??id).join(' / '):'按本次可用器械安排')+'</p></div><div class="tm-profile-row"><strong>身体与训练偏好</strong><p>'+esc(data.experiencePreference?.preferredMode==='minimal'?'安静训练':data.experiencePreference?.preferredMode??'尚未形成偏好')+'</p></div><details class="tm-profile-row"><summary>教练对我的了解</summary><p>'+known+' 个动作有训练记录 · 数据可信度 '+esc(data.trainingModel.dataConfidence)+'</p><p>疼痛反馈会阻止自动加重。训练记录用于训练建议与体验评估。</p></details><button class="tm-row" id="switch-user"><div><strong>当前训练档案</strong><small>'+esc(userId)+' · 点击切换</small></div><span class="chevron">›</span></button><div class="profile-legal">动作数据：<a href="https://repdb.co" target="_blank" rel="noreferrer">Exercise data by RepDB</a> · Free Tier，需署名，仅限 App 内使用。</div></div><div class="home-generate"><button id="profile-coach-settings">管理设置</button></div>';
+    document.querySelector('#profile-coach-settings').onclick=()=>coachSettings('profile');document.querySelector('#switch-user').onclick=()=>document.querySelector('.avatar').click();
+  }catch(error){if(screen.isConnected)screen.insertAdjacentHTML('beforeend','<div class="error">'+esc(error.message)+'</div>')}
+}
+async function recordsPage(){
+  leaveTrainingView();setNav('records');document.querySelector('.shell').dataset.screen='records';
+  app.innerHTML='<section class="records-screen">'+designHeader('记录','训练记录','每一次努力，都值得被看见。')+'<p class="home-suggestion">正在读取训练记录…</p></section>';
+  const screen=document.querySelector('.records-screen');
+  try{
+    const result=await api('/api/history?userId='+encodeURIComponent(userId));if(!screen.isConnected)return;
+    // 完成场 + 提前结束但有完成组的训练都算数(训练发生即记录)
+    const sessions=result.sessions.filter(x=>x.workout.status==='completed'||(x.workout.status==='aborted'&&x.workout.exercises.some(e=>e.completedSets>0))),minutes=Math.round(sessions.reduce((n,x)=>n+x.record.activeWorkoutMs,0)/60000);
+    screen.innerHTML=designHeader('记录','训练记录','每一次努力，都值得被看见。')+'<div class="tm-metrics">'+designMetric(sessions.length,'累计训练')+designMetric(minutes+' min','累计时长')+'</div><div class="records-filter"><button class="active" aria-pressed="true" data-filter="all">全部</button><button aria-pressed="false" data-filter="strength">力量</button><button aria-pressed="false" data-filter="mobility">恢复</button></div><div class="tm-stack" id="record-list"></div><div class="home-generate"><button id="latest-record" '+(!sessions.length?'disabled':'')+'>查看最近训练</button><button class="secondary" id="view-progress">查看训练进度</button></div>';
+    const list=document.querySelector('#record-list');
+    const draw=filter=>{
+      const filtered=sessions.filter(x=>filter==='all'||(filter==='mobility'?x.workout.goal==='mobility':x.workout.goal!=='mobility'));
+      list.innerHTML=filtered.length?filtered.map(x=>{const completed=x.workout.exercises.filter(e=>e.completedSets>0).length,total=x.workout.exercises.reduce((n,e)=>n+e.sets,0),sets=x.workout.exercises.reduce((n,e)=>n+e.completedSets,0);return '<button class="tm-row" data-record="'+esc(x.workout.sessionId)+'"><div><strong>'+new Date(x.record.completedAt).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'})+' · '+esc(goalNames[x.workout.goal]??'训练')+'</strong><small>'+Math.round(x.record.activeWorkoutMs/60000)+' 分钟 · '+completed+' 动作 · '+Math.round(sets/Math.max(1,total)*100)+'%'+(x.workout.status==='aborted'?' · 提前结束':'')+'</small></div><span class="chevron">›</span></button>'}).join(''):'<div class="tm-empty">还没有'+(filter==='all'?'':filter==='mobility'?'恢复':'力量')+'训练记录。完成训练后，这里会记录你的每次进步。</div>';
+      list.querySelectorAll('[data-record]').forEach(b=>b.onclick=()=>recordDetail(sessions.find(x=>x.workout.sessionId===b.dataset.record)));
+    };
+    draw('all');document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-filter]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b))});draw(b.dataset.filter)});
+    document.querySelector('#latest-record').onclick=()=>recordDetail(sessions[0]);document.querySelector('#view-progress').onclick=()=>progressPage(sessions);
+  }catch(error){if(screen.isConnected)screen.insertAdjacentHTML('beforeend','<div class="error">'+esc(error.message)+'</div>')}
+}
+function recordDetail(entry){
+  if(!entry)return;leaveTrainingView();setNav('records');document.querySelector('.shell').dataset.screen='complete';
+  const {record,workout:session,sets=[]}=entry,total=session.exercises.reduce((n,x)=>n+x.completedSets,0),reps=sets.filter(x=>!x.actualDurationSeconds&&['counted','reported'].includes(x.actualRepsSource)).reduce((n,x)=>n+x.actualReps,0);
+  app.innerHTML='<section class="tm-screen">'+designHeader('记录','单次训练详情',new Date(record.completedAt).toLocaleDateString('zh-CN')+' · '+(goalNames[session.goal]??'训练'))+'<div class="tm-stack"><div class="tm-metrics three">'+designMetric(Math.round(record.activeWorkoutMs/60000)+' min','训练时长')+designMetric(total,'完成组数')+designMetric(reps||'—','已确认次数')+'</div>'+session.exercises.map(x=>'<article class="tm-row"><span class="plan-thumb">'+workoutIcon()+'</span><div><strong>'+esc(x.name)+'</strong><small>完成 '+x.completedSets+' / '+x.sets+' 组</small><small>'+esc(sets.filter(set=>set.workoutExerciseId===x.id).map(set=>'第 '+set.setNumber+' 组：'+(set.actualDurationSeconds?formatDuration(set.actualDurationSeconds+'秒'):set.actualReps+' 次'+(set.actualRepsSource==='assumed'?'（按计划估算）':''))+' · '+(set.actualWeight?set.actualWeight+' kg':'自重')).join('；')||'计划目标：'+doseText(x))+'</small></div></article>').join('')+'<div class="tm-note lavender"><strong>训练反馈</strong><p>'+esc(record.perceivedFatigue?'整体强度 '+record.perceivedFatigue+' / 5 · '+(record.discomfort?'有不适反馈':'未报告不适'):'尚未提交整体训练反馈')+'</p></div><div class="tm-note"><strong>教练记录</strong><p>'+esc(sets.some(x=>x.pain)?'已记录疼痛反馈，下次计划会参考这次记录。':'已保存完成组数和组后反馈，供下次计划参考。')+'</p></div></div><div class="tm-footer"><button id="record-back">返回训练记录</button></div></section>';
+  document.querySelector('#record-back').onclick=recordsPage;
+}
+function progressPage(sessions){
+  leaveTrainingView();setNav('records');document.querySelector('.shell').dataset.screen='records';
+  const now=new Date(),weekStart=new Date(now.getFullYear(),now.getMonth(),now.getDate()-(now.getDay()+6)%7),days=Array(7).fill(0),weekly=sessions.filter(x=>new Date(x.record.completedAt)>=weekStart);
+  for(const entry of weekly)days[(new Date(entry.record.completedAt).getDay()+6)%7]+=entry.record.activeWorkoutMs/60000;
+  const max=Math.max(1,...days),monthly=sessions.filter(x=>{const d=new Date(x.record.completedAt);return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()}),minutes=Math.round(weekly.reduce((n,x)=>n+x.record.activeWorkoutMs,0)/60000);
+  app.innerHTML='<section class="records-screen">'+designHeader('进度','看见你的进步','把坚持变成更好的自己。')+'<div class="tm-stack"><div class="tm-metrics">'+designMetric(weekly.length+' 次','本周训练')+designMetric(minutes+' min','本周时长')+'</div><div class="progress-narrative"></div><div class="progress-weekly"></div><section class="tm-chart"><strong>本周训练时长</strong><div class="tm-bars" role="img" aria-label="本周每天的训练分钟数">'+days.map((value,i)=>'<div><span class="'+(i===(now.getDay()+6)%7?'today':'')+'" style="height:'+Math.max(value>0?4:0,value/max*112)+'px" title="'+Math.round(value)+' 分钟"></span><small>'+['一','二','三','四','五','六','日'][i]+'</small></div>').join('')+'</div></section><p class="home-suggestion">本月已完成 '+monthly.length+' 次训练</p><div class="tm-note"><strong>训练积累</strong><p>'+sessions.length+' 次训练 · '+sessions.reduce((n,x)=>n+x.workout.exercises.reduce((m,e)=>m+e.completedSets,0),0)+' 组已完成。每一组都是进步。</p></div>'+designCoach('plan',sessions.length?'继续按自己的节奏，逐步建立训练习惯。':'从第一次训练开始，让记录陪你看见进步。')+'</div><div class="home-generate"><button id="progress-back">查看全部记录</button></div></section>';
+  // ③ 进步叙事:同一口径来自 /api/progress(只用真实测量的次数,assumed 组不进统计)
+  api('/api/progress?userId='+encodeURIComponent(userId)).then(d=>{
+    const host=document.querySelector('.progress-narrative');if(!host||!host.isConnected)return;
+    host.innerHTML=d.exercises.length?('<div class="tm-note lavender"><strong>'+esc(d.summary)+'</strong>'+d.exercises.slice(0,3).map(r=>'<p>'+esc(r.headline)+'（'+r.measuredSets+' 组实测）</p>').join('')+'</div>'):'';
+    const week=document.querySelector('.progress-weekly');if(!week||!week.isConnected)return;
+    let html='';
+    if(d.volume)html+='<div class="tm-note"><strong>'+esc(d.volume.text)+'</strong></div>';
+    if(d.weekly&&d.weekly.length)html+='<div class="tm-note lavender"><strong>动作级对比</strong>'+d.weekly.slice(0,3).map(r=>'<p>'+esc(r.text)+'</p>').join('')+'</div>';
+    if(d.program)html+='<p class="home-suggestion">'+esc(d.program.status.text)+'</p>';
+    week.innerHTML=html;
+  }).catch(()=>{});
+  document.querySelector('#progress-back').onclick=recordsPage;
+}
+document.querySelectorAll('[data-tab]').forEach(x=>{x.onclick=()=>({home,training:trainingHub,records:recordsPage,profile:profilePage}[x.dataset.tab]||home)()});
+async function experimentPage(){const origin=new URLSearchParams(location.search).get('dataOrigin')||'human',d=await api(`/api/experiment?dataOrigin=${encodeURIComponent(origin)}`);app.innerHTML=`<section class="hero"><div class="eyebrow">Development only</div><h1>Experience Experiment</h1><div class="row"><label>数据来源 <select id="origin"><option value="human">真人实验</option><option value="automated_test">自动化测试</option><option value="demo">演示</option><option value="all">全部（仅审计）</option></select></label></div><p>当前：${esc(d.dataOrigin)} · <a href="/api/experiment/export.csv?dataOrigin=${encodeURIComponent(origin)}">导出 CSV</a> · <a href="/api/experiment/export.json?dataOrigin=${encodeURIComponent(origin)}">导出 JSON</a></p></section><section class="card"><div class="summary">${d.summary.map(x=>`<div class="stat"><strong>${esc(x.mode)}</strong>${x.sessions} sessions<br>实际 ${x.averageActualDuration??'-'}m / 主观 ${x.averagePerceivedDuration??'-'}m<br>完成率 ${x.completionRate??'-'}<br>无聊 ${x.boredom??'-'} · 难熬 ${x.aversiveness??'-'}<br>复用意愿 ${x.reuseIntent??'-'}</div>`).join('')}</div><h3>最近 Session</h3>${d.sessions.slice(0,20).map(x=>`<article class="exercise"><div class="num">${esc(x.experienceMode[0].toUpperCase())}</div><div><strong>${esc(x.sessionId)}</strong><div>${esc(x.dataOrigin)} · 实际 ${x.actualDurationMinutes} / 主观 ${x.perceivedDurationMinutes??'-'} · 差值 ${x.perceivedTimeDifference??'-'}</div></div><div class="dose">无聊 ${x.boredomScore??'-'}<br>难熬 ${x.aversivenessScore??'-'}</div></article>`).join('')||'<p>该来源还没有实验数据。</p>'}</section>`;document.querySelector('#origin').value=origin;document.querySelector('#origin').onchange=e=>location.href=`/experiment?dataOrigin=${encodeURIComponent(e.target.value)}`}
+function updateContinueCard(){
+  const card=document.querySelector('#saved-workout');if(!card)return;
+  const saved=workout&&!['preview','completed','aborted'].includes(workout.status),previewSaved=workout?.status==='preview'&&card.closest('.course-screen');
+  card.innerHTML=previewSaved?'<button class="tm-row" id="resume-preview"><div><strong>继续查看已生成的计划</strong><small>训练尚未开始</small></div><span class="chevron">↗</span></button>':saved?`<section class="continue-card"><strong>你有一场未结束的训练</strong><p>${esc(workout.exercises[workout.runtime.currentExerciseIndex]?.name??'上次训练')} · 先把这场练完，或结束它再生成新计划。</p><button id="continue-workout">继续上次训练</button><button id="discard-workout" class="secondary" style="margin-top:8px">结束这场，生成新计划</button></section>`:'';
+  // 修复:继续卡在场时生成按钮让位,消除两按钮点击区重叠(真机坐标点进生成器的根因)
+  const hero=document.querySelector('.session-hero');if(hero)hero.hidden=Boolean(saved);
+  const previewButton=card.querySelector('#resume-preview');if(previewButton)previewButton.onclick=render;
+  const button=document.querySelector('#continue-workout');if(button)button.onclick=continueWorkout;
+  const discard=document.querySelector('#discard-workout');if(discard)discard.onclick=async()=>{if(!workout)return;try{await action('abort');if(!workout||workout.status==='aborted'){setWorkout(null);home()}}catch(error){
+    // D11(2026-11-09):失败提示以前写进 #home-voice-status,而它在默认隐藏的 #intent-panel 里 ——
+    // 用户点了这个破坏性按钮却"什么都没发生",会反复点。这里直接写在继续卡片上。
+    voiceCaption=error.message;voiceUI();
+    if(card.isConnected){const note=document.createElement('div');note.className='error';note.setAttribute('role','alert');note.textContent=error.message;card.appendChild(note)}
+  }};
+}
+// ④ 回归钩子 + ⑤ 关系进度:久未训练时它主动开口,平时只报"一起练了多久"
+async function loadNudge(){
+  const host=document.querySelector('#nudge');if(!host)return;
+  try{
+    const d=await api('/api/progress?userId='+encodeURIComponent(userId));if(!host.isConnected)return;
+    const rel=d.relationship,n=d.nudge,program=d.program;
+    if((!rel||!rel.totalSessions)&&!program){host.innerHTML='';return}
+    if(program){
+      // 章节感优先:课程进度 > 关系摘要
+      host.innerHTML='<div class="tm-note lavender"><strong>'+esc(program.status.text)+'</strong><p>'+esc((n&&n.shouldNudge?n.text:program.program.title)+' · '+rel.text)+'</p></div>';
+      return;
+    }
+    const hard=n&&n.shouldNudge;
+    host.innerHTML='<div class="tm-note'+(hard?'':' lavender')+'"><strong>'+esc(hard?n.text:rel.label)+'</strong><p>'+esc(hard?rel.label+' · '+rel.text:rel.text)+'</p></div>';
+  }catch{host.innerHTML=''}
+}
+async function continueWorkout(){
+  if(!workout)return;const stamp=viewStamp();
+  try{const d=await api(`/api/workouts/${workout.sessionId}`);if(!currentView(stamp))return;setWorkout(d.workout);
+    if(localStorage.getItem(suspendedSessionKey)===workout.sessionId){lifecycleSuspended=true;await ensureLifecyclePause(true);render();return}
+    primeVoiceFromGesture();if(workout.status==='paused')await action('resume');else render();
+  }catch(error){if(currentView(stamp)){voiceCaption=error.message;voiceUI()}}
+}
+function home(intent=false){
+  leaveTrainingView();setNav('home');document.querySelector('.shell').dataset.screen='home';voiceInputTarget='home';voiceState='idle';voiceCaption='';
+  const hour=new Date().getHours(),greeting=hour<12?'早上好':hour<18?'下午好':'晚上好';
+  app.innerHTML='<section class="home-screen"><div class="home-dashboard">'+designHeader('训练台',greeting+'，训练伙伴','今天，给训练留一点时间。')+'<section class="session-hero"><div class="session-hero-content"><span class="session-kicker"><i></i> 今日训练</span><h2>准备好，<br>开练。</h2><p>按你的时间、器械和状态排一场。</p><button class="primary" type="button" id="generate-plan">生成今日计划 <span aria-hidden="true">↗</span></button></div><span class="hero-index" aria-hidden="true">TM / 01</span></section><div id="saved-workout"></div><div class="dashboard-grid"><section class="dashboard-week"><div class="dashboard-title"><h3>本周训练</h3><button class="text-button" id="home-records">查看记录 <span aria-hidden="true">↗</span></button></div><div class="tm-metrics"><div class="tm-metric"><small>完成场次</small><strong id="week-sessions">—</strong></div><div class="tm-metric"><small>累计时长</small><strong id="week-minutes">—</strong></div></div></section><section class="dashboard-coach"><div class="dashboard-title"><h3>教练角</h3></div><button type="button" class="tm-coach" id="open-coach"><img src="/tm-d5f35.svg" width="64" height="64" alt=""><span class="tm-coach-copy"><small>TrainMind 教练</small><strong>和教练聊聊</strong></span><span class="chevron" aria-hidden="true">↗</span></button></section></div><div id="nudge"></div><section class="dashboard-recent"><div class="dashboard-title"><h3>最近训练</h3></div><div id="recent-training" class="tm-empty">正在读取训练记录…</div></section></div><div id="intent-panel" hidden><button class="back-link secondary" id="intent-back">← 返回首页</button>'+designHeader('训练条件','今天想练什么？','选好条件，教练会为你安排这一场。')+'<div class="home-fields"><div><div class="field-title">训练时间</div><div class="time-stepper"><span id="duration-label">30 分钟</span><button id="duration-minus" type="button" aria-label="减少五分钟">−</button><button id="duration-plus" type="button" aria-label="增加五分钟">＋</button></div></div><div><div class="field-title">训练地点</div><div class="chips" data-group="place"><button type="button" class="chip" data-value="我在家">在家</button><button type="button" class="chip" data-value="我在 Test Gym">健身房</button><button type="button" class="chip" data-value="我在办公室">办公室</button></div></div><div><div class="field-title">可用器械</div><div class="chips" data-group="equipment"><button type="button" class="chip" data-value="有哑铃">哑铃</button><button type="button" class="chip" data-value="徒手自重">自重</button><button type="button" class="chip" data-value="有弹力带">弹力带</button></div></div><div><div class="field-title">今天的目标</div><div class="chips" data-group="goal"><button type="button" class="chip" data-value="想练全身">全身力量</button><button type="button" class="chip" data-value="想练下肢">下肢力量</button><button type="button" class="chip" data-value="想做恢复训练">恢复</button></div></div><div><div class="field-title">身体状态</div><div class="chips" data-group="state"><button type="button" class="chip" data-value="精力充沛">状态良好</button><button type="button" class="chip" data-value="今天有点累">有点累</button><button type="button" class="chip" data-value="膝盖不适">有不适</button></div></div></div><div class="intent-coach">'+designCoach('intent','也可以直接告诉我：今天想练什么？')+'</div><form id="create" class="home-compose"><details class="intent-advanced"><summary>用文字描述需求</summary><div class="prompt-wrap"><textarea class="prompt" id="prompt" maxlength="200" aria-label="训练需求" placeholder="例如：30分钟，在家，今天有点累，想活动一下。"></textarea><span class="prompt-count" id="prompt-count">0/200</span></div></details><p class="home-suggestion" id="home-voice-status" role="status" aria-live="polite">可以说出训练需求，也可以输入文字。</p><div id="error" role="alert"></div></form></div><div class="home-generate" id="intent-actions" hidden><button class="primary" type="button" id="submit-plan">生成训练计划</button><button class="secondary" type="button" id="home-mic" hidden>语音输入</button></div></section>';
+  updateContinueCard();loadNudge();document.querySelector('#open-coach').onclick=coachPage;document.querySelector('#home-records').onclick=recordsPage;document.querySelector('#intent-back').onclick=()=>home();
+  const dashboard=document.querySelector('.home-dashboard'),recent=document.querySelector('#recent-training');
+  api('/api/history?userId='+encodeURIComponent(userId)).then(({sessions})=>{
+    if(!dashboard.isConnected)return;
+    const completed=sessions.filter(x=>x.workout.status==='completed'||(x.workout.status==='aborted'&&x.workout.exercises.some(e=>e.completedSets>0))),now=new Date(),start=new Date(now.getFullYear(),now.getMonth(),now.getDate()-(now.getDay()+6)%7),weekly=completed.filter(x=>new Date(x.record.completedAt)>=start);
+    document.querySelector('#week-sessions').textContent=weekly.length+' 次';document.querySelector('#week-minutes').textContent=Math.round(weekly.reduce((n,x)=>n+x.record.activeWorkoutMs,0)/60000)+' min';
+    if(completed.length){const latest=completed[0];recent.className='tm-row';recent.innerHTML='<div><strong>'+esc(goalNames[latest.workout.goal]??'训练')+' · '+new Date(latest.record.completedAt).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'})+'</strong><small>完成 '+latest.workout.exercises.filter(x=>x.completedSets>0).length+' 个动作 · '+Math.round(latest.record.activeWorkoutMs/60000)+' 分钟</small></div><span class="chevron">›</span>';recent.setAttribute('role','button');recent.tabIndex=0;recent.onclick=()=>recordDetail(latest);recent.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();recent.click()}}}else recent.textContent='还没有训练记录。今天，从第一组开始。';
+  }).catch(error=>{if(recent.isConnected)recent.textContent=error.message});
+  const input=document.querySelector('#prompt'),count=document.querySelector('#prompt-count'),chips=[...document.querySelectorAll('[data-group] .chip')];
+  function updateInput(){count.textContent=`${input.value.length}/200`;chips.forEach(b=>{const selected=input.value.includes(b.dataset.value);b.classList.toggle('active',selected);b.setAttribute('aria-pressed',String(selected))});document.querySelector('#duration-label').textContent=(input.value.match(/(\d+)\s*分钟/)?.[1]??30)+' 分钟'}
+  input.oninput=updateInput;
+  const showIntent=()=>{dashboard.hidden=true;document.querySelector('#intent-panel').hidden=false;document.querySelector('.shell').dataset.view='intent';document.querySelector('#intent-actions').hidden=false;document.querySelector('#home-mic').hidden=false;if(!input.value)input.value='30分钟，我在家，徒手自重，想练全身，精力充沛';updateInput();app.scrollTop=0};
+  document.querySelector('#generate-plan').onclick=showIntent;document.querySelector('#submit-plan').onclick=()=>document.querySelector('#create').requestSubmit();
+  for(const [id,step] of [['duration-minus',-5],['duration-plus',5]])document.querySelector('#'+id).onclick=()=>{const minutes=Math.max(5,Math.min(120,Number(input.value.match(/(\d+)\s*分钟/)?.[1]??30)+step));input.value=/\d+\s*分钟/.test(input.value)?input.value.replace(/\d+\s*分钟/,minutes+'分钟'):minutes+'分钟，'+input.value;updateInput()};
+  if(intent===true)showIntent();
+  const homeMic=document.querySelector('#home-mic');
+  homeMic.onclick=async()=>{
+    if(offlineRecorder&&voiceInputTarget==='home'){offlineRecorder.finish(true);return}
+    if(recognition&&voiceInputTarget==='home'){if(recognition.stop)recognition.stop();else stopListening();return}
+    stopListening();voiceInputTarget='home';voiceEnabled=false;voiceState='starting';voiceCaption='正在打开麦克风…';voiceUI();
+    // 不 await 能力探测:保持用户手势上下文(浏览器路径本身可用;Windows 服务器场景重点击一次即走离线识别)
+    if(!input.isConnected||document.querySelector('.shell').dataset.screen!=='home')return;
+    listen(false,(text,result)=>{
+      if(!input.isConnected||document.querySelector('.shell').dataset.screen!=='home')return;
+      stopListening();input.value=[input.value.trim(),text.trim()].filter(Boolean).join('，').slice(0,200);updateInput();
+      voiceState='idle';voiceCaption=Number.isFinite(result?.confidence)&&result.confidence<0.45?'本次识别把握较低，请核对时间、地点和疼痛信息，修改后再生成计划。':'已写入训练需求，请核对时间、地点和疼痛信息后生成计划。';voiceUI();
+    });
+  };
+  voiceUI();
+  chips.forEach(b=>b.onclick=()=>{
+    if(b.parentElement.dataset.group==='equipment'){
+      const phrase=b.dataset.value,has=input.value.includes(phrase);
+      input.value=(has?input.value.replace(phrase,''):input.value+'，'+phrase).replace(/[，,、]+/g,'，').replace(/^，|，$/g,'').slice(0,200);
+      updateInput();document.querySelector('#error').innerHTML='';return;
+    }
+    const old=b.parentElement.querySelector('.chip.active'),selected=old===b?null:b;
+    let rest=input.value;
+    if(old)rest=rest.replace(old.dataset.value,'');
+    const phrases=[...document.querySelectorAll('[data-group]')].map(g=>g===b.parentElement?selected?.dataset.value:g.querySelector('.chip.active')?.dataset.value).filter(Boolean);
+    for(const phrase of phrases)rest=rest.replace(phrase,'');
+    rest=rest.replace(/[，,、]+/g,'，').replace(/^\s*，\s*|\s*，\s*$/g,'').trim();
+    input.value=[...phrases,rest].filter(Boolean).join('，').slice(0,200);updateInput();document.querySelector('#error').innerHTML='';
+  });
+  document.querySelector('#create').onsubmit=async e=>{
+    e.preventDefault();const prompt=input.value.trim(),button=document.querySelector('#submit-plan');
+    if(!prompt){const error=document.querySelector('#error');error.innerHTML='<div class="error">请先选择条件，或输入本次训练需求。</div>';error.scrollIntoView({block:'nearest'});return}
+    if(button.disabled)return;button.disabled=true;button.textContent='正在生成计划…';stopListening();
+    const stamp=viewStamp();try{const d=await api('/api/workouts/preview',{input:prompt,userId,experienceMode:'minimal',topic:'history'});if(!currentView(stamp))return;setWorkout(d.workout);interpretation=d.interpretation;editingPlan=false;coachHistory=[];repProgressKey='';render()}
+    catch(x){if(!currentView(stamp))return;const error=document.querySelector('#error');error.innerHTML=`<div class="error">${esc(x.message)}</div>`;error.scrollIntoView({block:'nearest'});button.disabled=false;button.textContent='生成训练计划'}
+  };
+}
+
+document.querySelector('.avatar').textContent=userId.slice(0,1).toUpperCase();
+document.querySelector('.appbar-date').textContent=new Intl.DateTimeFormat('zh-CN',{month:'long',day:'numeric',weekday:'short'}).format(new Date());
+(async()=>{
+  if(location.pathname==='/experiment')return experimentPage();
+  home();
+  voiceCapabilityPromise=api('/api/voice/status').then(result=>{offlineSpeechAvailable=result.offlineRecognition===true;voiceUI()}).catch(()=>{});
+  if(SpeechRecognitionApi?.available){SpeechRecognitionApi.available({langs:['zh-CN'],processLocally:true}).then(result=>{localRecognitionReady=result==='available'}).catch(()=>{})}
+  try{
+    const d=await api(`/api/workouts/active?userId=${encodeURIComponent(userId)}`);
+    if(!workout){setWorkout(d.workout);updateContinueCard();restoreTraining()}
+  }catch{}
+})();
+</script><script src="/visual-design.js"></script><script type="module" src="/perception.js"></script></body></html>

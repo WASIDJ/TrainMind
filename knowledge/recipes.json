@@ -1,0 +1,823 @@
+{
+  "version": "v1",
+  "source": "TrainMind product heuristic, 2026-09-28",
+  "recipes": [
+    {
+      "id": "general_full_body",
+      "goals": [
+        "general_fitness"
+      ],
+      "durations": [
+        10,
+        20,
+        30,
+        45,
+        60
+      ],
+      "environments": [
+        "home",
+        "office",
+        "gym"
+      ],
+      "blocks": [
+        {
+          "type": "warmup",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.1,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "main",
+          "required": true,
+          "movementPatterns": [
+            "squat",
+            "horizontal_push",
+            "core_stability"
+          ],
+          "timeShare": 0.34,
+          "workingSetBudget": [
+            3,
+            9
+          ],
+          "intensity": "moderate"
+        },
+        {
+          "type": "secondary",
+          "required": true,
+          "movementPatterns": [
+            "hinge",
+            "horizontal_pull"
+          ],
+          "timeShare": 0.2,
+          "workingSetBudget": [
+            2,
+            6
+          ],
+          "intensity": "moderate"
+        },
+        {
+          "type": "accessory",
+          "required": false,
+          "movementPatterns": [
+            "arm_curl",
+            "arm_extension",
+            "calf"
+          ],
+          "timeShare": 0.1,
+          "workingSetBudget": [
+            0,
+            4
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "conditioning",
+          "required": false,
+          "movementPatterns": [
+            "conditioning"
+          ],
+          "timeShare": 0.12,
+          "workingSetBudget": [
+            0,
+            1
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "mobility",
+          "required": true,
+          "movementPatterns": [
+            "mobility"
+          ],
+          "timeShare": 0.04,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "cooldown",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.1,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        }
+      ]
+    },
+    {
+      "id": "upper_body",
+      "goals": [
+        "upper_body"
+      ],
+      "durations": [
+        10,
+        20,
+        30,
+        45,
+        60
+      ],
+      "environments": [
+        "home",
+        "office",
+        "gym"
+      ],
+      "blocks": [
+        {
+          "type": "warmup",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.1,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "main",
+          "required": true,
+          "movementPatterns": [
+            "horizontal_push",
+            "horizontal_pull"
+          ],
+          "timeShare": 0.34,
+          "workingSetBudget": [
+            2,
+            8
+          ],
+          "intensity": "moderate"
+        },
+        {
+          "type": "secondary",
+          "required": true,
+          "movementPatterns": [
+            "vertical_push",
+            "vertical_pull"
+          ],
+          "timeShare": 0.2,
+          "workingSetBudget": [
+            2,
+            6
+          ],
+          "intensity": "moderate"
+        },
+        {
+          "type": "accessory",
+          "required": false,
+          "movementPatterns": [
+            "arm_curl",
+            "arm_extension"
+          ],
+          "timeShare": 0.16,
+          "workingSetBudget": [
+            0,
+            5
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "mobility",
+          "required": false,
+          "movementPatterns": [
+            "mobility"
+          ],
+          "timeShare": 0.1,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "cooldown",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.1,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        }
+      ]
+    },
+    {
+      "id": "lower_body",
+      "goals": [
+        "lower_body"
+      ],
+      "durations": [
+        10,
+        20,
+        30,
+        45,
+        60
+      ],
+      "environments": [
+        "home",
+        "office",
+        "gym"
+      ],
+      "blocks": [
+        {
+          "type": "warmup",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.0909,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "main",
+          "required": true,
+          "movementPatterns": [
+            "squat",
+            "hinge"
+          ],
+          "timeShare": 0.3091,
+          "workingSetBudget": [
+            2,
+            8
+          ],
+          "intensity": "moderate"
+        },
+        {
+          "type": "secondary",
+          "required": true,
+          "movementPatterns": [
+            "lunge",
+            "hip_extension"
+          ],
+          "timeShare": 0.1818,
+          "workingSetBudget": [
+            2,
+            6
+          ],
+          "intensity": "moderate"
+        },
+        {
+          "type": "accessory",
+          "required": false,
+          "movementPatterns": [
+            "calf"
+          ],
+          "timeShare": 0.1091,
+          "workingSetBudget": [
+            0,
+            3
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "conditioning",
+          "required": false,
+          "movementPatterns": [
+            "conditioning"
+          ],
+          "timeShare": 0.1273,
+          "workingSetBudget": [
+            0,
+            1
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "mobility",
+          "required": false,
+          "movementPatterns": [
+            "mobility"
+          ],
+          "timeShare": 0.0909,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "cooldown",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.0909,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        }
+      ]
+    },
+    {
+      "id": "back",
+      "goals": [
+        "back_strength"
+      ],
+      "durations": [
+        10,
+        20,
+        30,
+        45,
+        60
+      ],
+      "environments": [
+        "home",
+        "office",
+        "gym"
+      ],
+      "blocks": [
+        {
+          "type": "warmup",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.1,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "main",
+          "required": true,
+          "movementPatterns": [
+            "vertical_pull",
+            "horizontal_pull"
+          ],
+          "timeShare": 0.38,
+          "workingSetBudget": [
+            2,
+            8
+          ],
+          "intensity": "moderate"
+        },
+        {
+          "type": "secondary",
+          "required": true,
+          "movementPatterns": [
+            "scapular_control",
+            "hinge"
+          ],
+          "timeShare": 0.22,
+          "workingSetBudget": [
+            2,
+            6
+          ],
+          "intensity": "moderate"
+        },
+        {
+          "type": "accessory",
+          "required": false,
+          "movementPatterns": [
+            "arm_curl"
+          ],
+          "timeShare": 0.12,
+          "workingSetBudget": [
+            0,
+            3
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "mobility",
+          "required": false,
+          "movementPatterns": [
+            "mobility"
+          ],
+          "timeShare": 0.08,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "cooldown",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.1,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        }
+      ]
+    },
+    {
+      "id": "chest",
+      "goals": [
+        "chest_strength"
+      ],
+      "durations": [
+        10,
+        20,
+        30,
+        45,
+        60
+      ],
+      "environments": [
+        "home",
+        "office",
+        "gym"
+      ],
+      "blocks": [
+        {
+          "type": "warmup",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.0909,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "main",
+          "required": true,
+          "movementPatterns": [
+            "horizontal_push"
+          ],
+          "timeShare": 0.3455,
+          "workingSetBudget": [
+            2,
+            8
+          ],
+          "intensity": "moderate"
+        },
+        {
+          "type": "secondary",
+          "required": true,
+          "movementPatterns": [
+            "vertical_push"
+          ],
+          "timeShare": 0.1636,
+          "workingSetBudget": [
+            1,
+            4
+          ],
+          "intensity": "moderate"
+        },
+        {
+          "type": "accessory",
+          "required": false,
+          "movementPatterns": [
+            "arm_extension"
+          ],
+          "timeShare": 0.1273,
+          "workingSetBudget": [
+            0,
+            4
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "mobility",
+          "required": false,
+          "movementPatterns": [
+            "mobility"
+          ],
+          "timeShare": 0.0909,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "conditioning",
+          "required": false,
+          "movementPatterns": [
+            "conditioning"
+          ],
+          "timeShare": 0.0909,
+          "workingSetBudget": [
+            0,
+            1
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "cooldown",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.0909,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        }
+      ]
+    },
+    {
+      "id": "mobility",
+      "goals": [
+        "mobility"
+      ],
+      "durations": [
+        10,
+        20,
+        30,
+        45
+      ],
+      "environments": [
+        "home",
+        "office",
+        "gym"
+      ],
+      "blocks": [
+        {
+          "type": "warmup",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.1,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "main",
+          "required": true,
+          "movementPatterns": [
+            "mobility"
+          ],
+          "timeShare": 0.42,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "secondary",
+          "required": true,
+          "movementPatterns": [
+            "core_stability"
+          ],
+          "timeShare": 0.22,
+          "workingSetBudget": [
+            1,
+            3
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "mobility",
+          "required": true,
+          "movementPatterns": [
+            "mobility"
+          ],
+          "timeShare": 0.16,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "cooldown",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.1,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        }
+      ]
+    },
+    {
+      "id": "desk_break",
+      "goals": [
+        "mobility"
+      ],
+      "durations": [
+        10,
+        20
+      ],
+      "environments": [
+        "home",
+        "office",
+        "gym"
+      ],
+      "blocks": [
+        {
+          "type": "main",
+          "required": true,
+          "movementPatterns": [
+            "mobility",
+            "core_stability"
+          ],
+          "timeShare": 0.7,
+          "workingSetBudget": [
+            0,
+            2
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "mobility",
+          "required": true,
+          "movementPatterns": [
+            "mobility"
+          ],
+          "timeShare": 0.2,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "cooldown",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.1,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        }
+      ]
+    },
+    {
+      "id": "recovery",
+      "goals": [
+        "mobility"
+      ],
+      "durations": [
+        10,
+        20,
+        30
+      ],
+      "environments": [
+        "home",
+        "office",
+        "gym"
+      ],
+      "blocks": [
+        {
+          "type": "warmup",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.1,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "main",
+          "required": true,
+          "movementPatterns": [
+            "mobility",
+            "core_stability"
+          ],
+          "timeShare": 0.48,
+          "workingSetBudget": [
+            0,
+            2
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "secondary",
+          "required": true,
+          "movementPatterns": [
+            "hip_extension"
+          ],
+          "timeShare": 0.14,
+          "workingSetBudget": [
+            0,
+            1
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "mobility",
+          "required": true,
+          "movementPatterns": [
+            "mobility"
+          ],
+          "timeShare": 0.18,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "cooldown",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.1,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        }
+      ]
+    },
+    {
+      "id": "general_conditioning",
+      "goals": [
+        "general_fitness"
+      ],
+      "durations": [
+        10,
+        20,
+        30,
+        45,
+        60
+      ],
+      "environments": [
+        "home",
+        "office",
+        "gym"
+      ],
+      "blocks": [
+        {
+          "type": "warmup",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.1064,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "main",
+          "required": true,
+          "movementPatterns": [
+            "conditioning"
+          ],
+          "timeShare": 0.4468,
+          "workingSetBudget": [
+            0,
+            1
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "secondary",
+          "required": true,
+          "movementPatterns": [
+            "core_stability"
+          ],
+          "timeShare": 0.1915,
+          "workingSetBudget": [
+            1,
+            3
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "mobility",
+          "required": true,
+          "movementPatterns": [
+            "mobility"
+          ],
+          "timeShare": 0.1489,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        },
+        {
+          "type": "cooldown",
+          "required": true,
+          "movementPatterns": [],
+          "timeShare": 0.1064,
+          "workingSetBudget": [
+            0,
+            0
+          ],
+          "intensity": "low"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "trainmind",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.ts",
+    "dev:mobile": "node --watch src/server.ts --mobile",
+    "start": "node src/server.ts",
+    "test": "node --test test/",
+    "test:browser": "TRAINMIND_TEST_BROWSER='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' node --test test/frontend.test.ts",
+    "test:telemetry": "node --test test/telemetry/"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

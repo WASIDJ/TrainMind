@@ -1,0 +1,22 @@
+{
+  "reviewStatus": "reviewed",
+  "reviewedAt": "2026-09-28",
+  "profiles": {
+    "squat": {"setupCue":"双脚与髋同宽，脚掌踩稳，膝盖朝脚尖方向。","cadenceType":"controlled","cadence":3,"breathingCue":"下蹲吸气，站起时呼气。","midpointCue":"保持脚掌稳定，膝盖继续对准脚尖。","finalRepCue":"最后两次，保持相同的下蹲幅度。","finishCue":"完成本组，站稳后再放松。","safetyCue":"如膝或髋出现疼痛，停止动作。"},
+    "hinge": {"setupCue":"双脚踩稳，膝盖微屈，先把髋部向后送。","cadenceType":"controlled","cadence":3,"breathingCue":"髋部后移时吸气，伸髋站直时呼气。","midpointCue":"保持背部自然稳定，用髋部带动动作。","finalRepCue":"最后两次，缩小到仍能稳定控制的幅度。","finishCue":"完成本组，站稳后放下负重。","safetyCue":"如腰背出现疼痛，停止动作。"},
+    "horizontal_push": {"setupCue":"肩胛稳定，手腕保持在肘部上方。","cadenceType":"controlled","cadence":3,"breathingCue":"推起时呼气，回程时吸气。","midpointCue":"保持手腕与前臂稳定对齐。","finalRepCue":"最后两次，控制回程，不要弹起。","finishCue":"完成本组，安全放回负重。","safetyCue":"如肩或腕出现疼痛，停止动作。"},
+    "vertical_push": {"setupCue":"站稳或坐稳，肋骨自然收住，手腕对齐前臂。","cadenceType":"controlled","cadence":3,"breathingCue":"推举时呼气，下放时吸气。","midpointCue":"保持躯干稳定，不要用腰部后仰代偿。","finalRepCue":"最后两次，按可控幅度推举。","finishCue":"完成本组，控制负重回到安全位置。","safetyCue":"如肩部或腰背不适，停止动作。"},
+    "horizontal_pull": {"setupCue":"先稳定躯干，让肩膀远离耳朵。","cadenceType":"controlled","cadence":3,"breathingCue":"拉动时呼气，控制伸展时吸气。","midpointCue":"肘部沿身体方向移动，避免耸肩。","finalRepCue":"最后两次，缓慢控制回程。","finishCue":"完成本组，平稳放下负重。","safetyCue":"如肩或腰背出现疼痛，停止动作。"},
+    "vertical_pull": {"setupCue":"坐稳或站稳，先轻轻下沉肩胛。","cadenceType":"controlled","cadence":3,"breathingCue":"下拉时呼气，控制回到起点时吸气。","midpointCue":"让肘部向下移动，避免用身体摆动借力。","finalRepCue":"最后两次，保持身体不晃动。","finishCue":"完成本组，控制把手回到起点。","safetyCue":"如肩部出现疼痛，停止动作。"},
+    "lunge": {"setupCue":"双脚站稳，前后留出舒适步幅。","cadenceType":"controlled","cadence":3,"breathingCue":"下沉时吸气，站起时呼气。","midpointCue":"前脚踩稳，膝盖朝脚尖方向。","finalRepCue":"最后两次，先保持平衡再完成动作。","finishCue":"完成本组，双脚站稳后换侧或放松。","safetyCue":"如膝、髋或平衡不适，停止动作。"},
+    "hip_extension": {"setupCue":"仰卧或站稳，先收紧腹部并稳定骨盆。","cadenceType":"controlled","cadence":3,"breathingCue":"伸髋发力时呼气，回程时吸气。","midpointCue":"由臀部发力，避免腰部过度拱起。","finalRepCue":"最后两次，在腰背稳定范围内完成。","finishCue":"完成本组，缓慢回到起始姿势。","safetyCue":"如腰背出现疼痛，停止动作。"},
+    "core_stability": {"setupCue":"先轻收腹部，保持脊柱自然稳定。","cadenceType":"steady","cadence":3,"breathingCue":"持续平稳呼吸，不要憋气。","midpointCue":"保持躯干稳定，动作幅度以不晃动为准。","finalRepCue":"最后两次，继续均匀呼吸。","finishCue":"完成本组，缓慢放松支撑。","safetyCue":"如腰背出现疼痛或麻木，立即停止。"},
+    "core_flexion_rotation": {"setupCue":"先稳定骨盆，颈部放松，不用手拉头部。","cadenceType":"controlled","cadence":3,"breathingCue":"卷起或旋转时呼气，回程吸气。","midpointCue":"由躯干完成动作，避免快速甩动。","finalRepCue":"最后两次，缩小到仍能控制的幅度。","finishCue":"完成本组，平躺或坐稳后放松。","safetyCue":"如颈部或腰背疼痛，停止动作。"},
+    "calf": {"setupCue":"扶稳支撑，脚掌前部踩稳。","cadenceType":"controlled","cadence":3,"breathingCue":"抬起脚跟时呼气，下放时吸气。","midpointCue":"在舒适范围内抬高脚跟，再缓慢下放。","finalRepCue":"最后两次，不借助弹跳。","finishCue":"完成本组，双脚站稳。","safetyCue":"如踝或跟腱疼痛，停止动作。"},
+    "arm_curl": {"setupCue":"上臂靠近身体，手腕保持自然。","cadenceType":"controlled","cadence":3,"breathingCue":"屈肘时呼气，伸展回程时吸气。","midpointCue":"保持上臂稳定，不前后摆动。","finalRepCue":"最后两次，控制下放速度。","finishCue":"完成本组，缓慢放下负重。","safetyCue":"如肘或腕疼痛，停止动作。"},
+    "arm_extension": {"setupCue":"肩膀放松，上臂保持稳定。","cadenceType":"controlled","cadence":3,"breathingCue":"伸肘时呼气，屈肘回程时吸气。","midpointCue":"只移动前臂，避免肩膀代偿。","finalRepCue":"最后两次，控制回程幅度。","finishCue":"完成本组，安全放下负重。","safetyCue":"如肘或肩疼痛，停止动作。"},
+    "scapular_control": {"setupCue":"肩膀放松下沉，颈部保持舒适。","cadenceType":"controlled","cadence":3,"breathingCue":"拉开或外旋时呼气，回程时吸气。","midpointCue":"动作轻而可控，不要耸肩。","finalRepCue":"最后两次，保持肩颈放松。","finishCue":"完成本组，缓慢回到起点。","safetyCue":"如肩部疼痛或麻木，停止动作。"},
+    "mobility": {"setupCue":"选择无痛的活动范围，动作缓慢开始。","cadenceType":"steady","cadence":4,"breathingCue":"保持自然呼吸，不屏气。","midpointCue":"在舒适范围内继续，不追求更大幅度。","finalRepCue":"最后两次，保持轻柔平稳。","finishCue":"完成后缓慢回到自然站姿或坐姿。","safetyCue":"出现锐痛、麻木或头晕时立即停止。"},
+    "conditioning": {"setupCue":"先确认周围空间安全，选择能持续说短句的强度。","cadenceType":"rhythmic","cadence":2,"breathingCue":"保持连续呼吸，不要憋气。","midpointCue":"维持稳定节奏；觉得太累时主动放慢。","finalRepCue":"最后一段保持可控，不冲刺。","finishCue":"结束后逐渐放慢，站稳再休息。","safetyCue":"胸痛、异常气短或头晕时立即停止。"}
+  }
+}

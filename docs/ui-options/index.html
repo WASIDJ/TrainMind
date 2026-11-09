@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrainMind · 首页方向</title>
+<link rel="stylesheet" href="options.css">
+<script src="options.js" defer></script>
+</head>
+<body>
+<main class="review">
+  <header class="intro">
+    <div><p class="kicker">TRAINMIND / DESIGN REVIEW</p><h1>你想打开哪一版？</h1></div>
+    <p>同一场示例训练，三种手机首页。<br>点「查看训练计划」可以看下一屏。<br><a href="ladder/">打开 Ladder 参考版完整流程 ↗</a><br><a href="night/">查看上一版 ↗</a></p>
+  </header>
+  <nav class="switcher" aria-label="比较首页方向">
+    <button data-show="all" aria-pressed="true">并排看</button>
+    <button data-show="a" aria-pressed="false">A · 夜场</button>
+    <button data-show="b" aria-pressed="false">B · 晨练</button>
+    <button data-show="c" aria-pressed="false">C · 动起来</button>
+  </nav>
+  <div class="options" id="options"></div>
+</main>
+<dialog aria-labelledby="sheet-title"><div class="sheet"></div></dialog>
+</body>
+</html>

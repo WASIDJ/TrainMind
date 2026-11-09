@@ -1,0 +1,74 @@
+{
+  "sources": [
+    {
+      "sourceId": "repdb-exercise-dataset-free",
+      "sourceName": "RepDB Exercise Dataset (Free Tier)",
+      "sourceUrl": "https://github.com/RepDB/exercise-dataset",
+      "sourceCommit": "9ed9357f09c7566ea0256c57ebd6374ebb8b575e",
+      "license": "RepDB Free Tier License v1.0 (LICENSE-DATA.md)",
+      "attributionRequired": true,
+      "redistributionAllowed": false,
+      "generativeAiDerivationAllowed": false,
+      "commercialInAppUseAllowed": true,
+      "mediaImportAllowed": false,
+      "imageModificationsAllowed": [
+        "display",
+        "resize",
+        "crop",
+        "recolor"
+      ],
+      "premiumSamplesAllowed": false,
+      "parsedCount": 601,
+      "productionCandidateCount": 80,
+      "importedAt": "2026-09-28T07:50:16.099Z",
+      "notes": "Canonical free-tier JSON only. No media or premium-samples imported. Source and derived content are for in-app use and must not be republished as a dataset or API.",
+      "premiumSamplesImported": 0,
+      "mediaImportedCount": 0
+    },
+    {
+      "source_id": "trainmind-authored-v0",
+      "source_name": "TrainMind authored training knowledge",
+      "source_url": "local:knowledge/exercises",
+      "source_type": "first_party",
+      "version": "v0",
+      "license": "TrainMind original content",
+      "commercial_use": true,
+      "modification_allowed": true,
+      "attribution_required": false,
+      "imported_fields": [
+        "instructions",
+        "coachingCues",
+        "voiceCues",
+        "substitutions"
+      ],
+      "imported_at": "2026-09-24",
+      "notes": "Authored in this repository. No third-party images or video."
+    },
+    {
+      "source_id": "yuhonas-free-exercise-db-a859101",
+      "mediaImportAllowed": false,
+      "source_name": "yuhonas/free-exercise-db",
+      "source_url": "https://github.com/yuhonas/free-exercise-db",
+      "source_type": "github_dataset",
+      "version": "a859101d633a01c4a1a920d6a8ce41dabba0705f",
+      "license": "Unlicense (text fields only)",
+      "commercial_use": true,
+      "modification_allowed": true,
+      "attribution_required": false,
+      "imported_fields": [
+        "id",
+        "name",
+        "force",
+        "level",
+        "mechanic",
+        "equipment",
+        "primaryMuscles",
+        "secondaryMuscles",
+        "instructions",
+        "category"
+      ],
+      "imported_at": null,
+      "notes": "Second candidate source only. Not imported in this knowledge foundation release; mediaImportAllowed=false because image provenance remains unverified."
+    }
+  ]
+}

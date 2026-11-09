@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>TrainMind · 组内感知自检</title>
+<style>
+  :root{--ink:#1f2937;--muted:#667085;--panel:#f8f6f3;--accent:#ff7f58;--line:#ece9e5}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);background:#ece9e5;padding:16px}
+  .card{max-width:420px;margin:0 auto 12px;background:#fff;border-radius:20px;padding:16px}
+  h1{font-size:20px;margin:0 0 6px}
+  p{color:var(--muted);font-size:13px;line-height:1.6;margin:6px 0}
+  button{border:0;border-radius:14px;padding:12px 16px;min-height:48px;font:inherit;font-weight:700;background:var(--accent);color:#fff;width:100%;cursor:pointer}
+  button.secondary{background:var(--panel);color:var(--ink)}
+  .meter{position:relative;height:14px;background:var(--line);border-radius:8px;overflow:hidden;margin:10px 0}
+  .meter i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--accent);transition:width .08s linear}
+  .mark{position:absolute;top:-4px;bottom:-4px;width:2px;background:#8378f7}
+  .mark.rise{background:#f5a524}
+  .mark.strain{background:#ef5b55}
+  .row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px}
+  .state{font-weight:700;font-size:13px;padding:6px 10px;border-radius:10px;background:var(--panel);display:inline-block}
+  .state.ready{background:#e8f7ee;color:#1a7f47}
+  ol{font-size:13px;line-height:1.8;padding-left:20px;margin:8px 0;max-height:220px;overflow:auto}
+  .tag{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+</style>
+</head>
+<body>
+<section class="card">
+  <h1>组内感知自检</h1>
+  <p>真机验收用：开麦后做几次深蹲，看这里是否<b>真的听到</b>你（基线、能量、触发）。音频只在内存分析，不保存不上传。</p>
+  <button id="start">开始自检（需要麦克风）</button>
+  <div id="live" hidden>
+    <div class="row"><span>平滑能量 <b id="ema">—</b></span><span>基线 <b id="base">校准中…</b></span></div>
+    <div class="meter"><i id="bar"></i><span class="mark rise" id="mRise"></span><span class="mark strain" id="mStrain"></span></div>
+    <div class="row"><span>橙=呼吸变重阈值(×1.6)</span><span>红=发力峰值(×3)</span></div>
+    <p><span class="state" id="state">校准中：保持自然呼吸 6 秒</span></p>
+    <p>静默计时：<b id="silence">0.0</b> 秒（超过 8 秒会触发“组内停顿”）</p>
+    <h3 style="font-size:14px;margin:14px 0 0">感知事件</h3>
+    <ol id="log"></ol>
+    <button id="stop" class="secondary" style="margin-top:12px">停止</button>
+  </div>
+</section>
+<script type="module">
+import { createEffortAnalyzer, PERCEPTION_CONFIG } from "/perception.js";
+const $ = id => document.getElementById(id);
+let ctx, stream, timer, analyzer, starting = false;
+async function start() {
+  // D10(2026-11-09):resumeIfAllowed() 与用户手点 start() 会并发进来(权限查询慢时尤其明显),
+  // 以前会开出两路麦克风流、两个 interval —— 后一个覆盖 timer id,前一个永远清不掉。
+  if (starting || !$('live').hidden) return;
+  starting = true;
+  $('start').disabled = true;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    await ctx.resume();
+    const src = ctx.createMediaStreamSource(stream), an = ctx.createAnalyser(), mute = ctx.createGain();
+    an.fftSize = 2048; mute.gain.value = 0;
+    src.connect(an); an.connect(mute); mute.connect(ctx.destination);
+    analyzer = createEffortAnalyzer();
+    $('live').hidden = false;
+    localStorage.setItem('tm-perception-started', '1');
+    const buf = new Float32Array(an.fftSize);
+    let silenceMs = 0, last = Date.now();
+    timer = setInterval(() => {
+      const now = Date.now(), dt = now - last; last = now;
+      an.getFloatTimeDomainData(buf);
+      let e = 0; for (let i = 0; i < buf.length; i++) e += buf[i] * buf[i];
+      const rms = Math.sqrt(e / buf.length);
+      const base = analyzer.baseline;
+      for (const evt of analyzer.feed(rms, now)) add(evt);
+      const ema = analyzer.ema;
+      $('ema').textContent = ema.toFixed(4);
+      if (base === null) { $('base').textContent = '校准中…'; $('bar').style.width = '0%'; }
+      else {
+        $('base').textContent = base.toFixed(4);
+        const pct = Math.min(100, ema / (base * 3.2) * 100);
+        $('bar').style.width = pct + '%';
+        $('mRise').style.left = (base * PERCEPTION_CONFIG.riseFactor / (base * 3.2) * 100) + '%';
+        $('mStrain').style.left = (base * PERCEPTION_CONFIG.strainFactor / (base * 3.2) * 100) + '%';
+        $('state').textContent = '监听中：正常说话不会触发，持续喘/发力才会';
+        $('state').className = 'state ready';
+        silenceMs = ema < base * PERCEPTION_CONFIG.pauseFloorRatio ? silenceMs + dt : 0;
+        $('silence').textContent = (silenceMs / 1000).toFixed(1);
+      }
+    }, 100);
+  } catch (error) {
+    $('start').disabled = false;
+    alert('无法打开麦克风：' + (error?.message ?? error));
+  } finally {
+    starting = false;
+  }
+}
+function add(evt) {
+  const li = document.createElement('li');
+  const label = { effort_rise: '呼吸变重', strain_peak: '发力峰值', long_pause: '组内停顿' }[evt.type] ?? evt.type;
+  li.innerHTML = `<span class="tag">${new Date(evt.t).toLocaleTimeString('zh-CN')}</span> ${label}`;
+  $('log').prepend(li);
+}
+function stop() {
+  // D10:timer 要置空;ctx 关掉后把引用也清掉,避免"看起来还在监听"
+  clearInterval(timer); timer = null;
+  try { stream?.getTracks().forEach(t => t.stop()); } catch {} try { ctx?.close(); } catch {}
+  ctx = null; stream = null; analyzer = null;
+  $('live').hidden = true; $('start').disabled = false;
+  localStorage.removeItem('tm-perception-started');
+}
+$('start').onclick = start; $('stop').onclick = stop;
+// 系统/浏览器授权弹窗会把页面切到后台，回来时 start() 的异步流程可能已经中断。
+// 记住"用户点过开始"，回到前台且已授权就自动续上，不用再点第二次。
+async function resumeIfAllowed() {
+  // D10(2026-11-09):加互斥,并区分"无手势恢复失败"与"正在监听"——否则页面会假装在听,基线恒 0。
+  if (localStorage.getItem('tm-perception-started') !== '1') return;
+  if (!$('live').hidden || starting) return;
+  try {
+    const p = await navigator.permissions.query({ name: 'microphone' });
+    if (p.state !== 'granted') return;
+    await start();
+    if (ctx && ctx.state !== 'running') { $('state').textContent = '已暂停：点「开始自检」继续'; $('state').className = 'state'; }
+  } catch { /* 权限查询不支持则等用户点 */ }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) resumeIfAllowed(); });
+window.addEventListener('pageshow', resumeIfAllowed);
+resumeIfAllowed();
+</script>
+</body>
+</html>

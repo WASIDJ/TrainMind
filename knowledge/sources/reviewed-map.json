@@ -1,0 +1,15 @@
+{
+  "Alternate_Incline_Dumbbell_Curl": {
+    "id": "incline-dumbbell-curl",
+    "movementPattern": "arm_curl",
+    "environment": ["gym"],
+    "equipment": ["dumbbell", "bench"],
+    "unilateral": false,
+    "repOrTimeBased": "reps",
+    "defaultRepRange": [8, 12],
+    "defaultSetRange": [1, 3],
+    "restRangeSeconds": [45, 90],
+    "attentionLevel": "medium",
+    "reviewNote": "Source example verified against upstream README. Prescription fields are TrainMind review values, not upstream fields."
+  }
+}

@@ -1,0 +1,106 @@
+*{box-sizing:border-box}
+:root{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:#20201e;background:#eae8e1}
+body{margin:0}
+button{font:inherit;cursor:pointer}
+button:focus-visible{outline:3px solid #6980eb;outline-offset:3px}
+button, img, svg{vertical-align:middle}
+button svg{pointer-events:none}
+[hidden]{display:none!important}
+.review{max-width:1260px;margin:auto;padding:32px 26px 42px}
+.intro{display:flex;justify-content:space-between;align-items:end;gap:16px}
+.intro h1{margin:7px 0 0;font-size:clamp(29px,5vw,50px);letter-spacing:-.06em;line-height:1.08}
+.intro>p{margin:0;color:#5a5851;line-height:1.65;font-size:13px}
+.kicker,.overline{font-size:11px;font-weight:750;letter-spacing:.12em;margin:0}
+.switcher{display:flex;flex-wrap:wrap;gap:6px;margin:20px 0 22px}
+.switcher button{border:1px solid #cecbc0;border-radius:99px;background:transparent;padding:9px 13px;color:#282823;min-height:42px;font-size:13px}
+.switcher button[aria-pressed=true]{background:#262621;color:#fff;border-color:#262621}
+.options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:start}
+.options.single{grid-template-columns:minmax(0,390px);justify-content:center}
+.label{display:flex;align-items:center;gap:8px;margin:0 0 10px}
+.label b{background:#d8d5cb;border-radius:7px;width:25px;height:25px;display:grid;place-items:center;font:700 13px ui-monospace,monospace}
+.label h2{margin:0;font-size:15px}
+.label p{margin:0 0 0 auto;font-size:11px;color:#555249}
+.phone{width:100%;height:735px;display:flex;flex-direction:column;border-radius:25px;overflow:hidden;background:var(--bg);color:var(--fg);box-shadow:0 9px 24px #211a141c}
+.theme-a{--bg:#10141b;--fg:#f5f6fa;--muted:#afb6c3;--line:#363e4b;--brand:#3558ee;--cta:#365af0;--cta-text:#fff}
+.theme-b{--bg:#f7f3ea;--fg:#272327;--muted:#63585d;--line:#d8cfc1;--brand:#5b3e57;--cta:#5b3e57;--cta-text:#fff}
+.theme-c{--bg:#fcf0d8;--fg:#211b16;--muted:#625245;--line:#b8a489;--brand:#b92316;--cta:#231b15;--cta-text:#fff4dc}
+.bar{height:58px;min-height:58px;display:flex;justify-content:space-between;align-items:center;padding:0 17px}
+.bar span{display:flex;align-items:center;gap:7px;font-weight:850;letter-spacing:-.045em;font-size:19px}
+.bar span svg{width:27px;height:27px;stroke-width:2.5}
+.bar button,.text,.coach,.tabs button{border:0;color:inherit;background:none;padding:0}
+.bar button{display:grid;place-items:center;width:44px;height:44px}
+.bar button svg,.start svg,.coach svg,.tabs svg{width:20px;height:20px}
+.start{width:100%;min-height:46px;display:flex;align-items:center;justify-content:space-between;gap:8px;border:0;padding:10px 15px;color:var(--cta-text);background:var(--cta);font-weight:750;font-size:14px;text-align:left}
+.start:hover{filter:brightness(1.12)}
+.hero-image{width:100%;height:100%;object-fit:cover;display:block}
+.cover{position:relative;height:457px;min-height:457px;isolation:isolate}
+.cover img{position:absolute;inset:0;object-position:center 38%;z-index:-2}
+.cover::after{content:"";position:absolute;inset:25% 0 0;background:linear-gradient(transparent,#090d15d9 69%,#090d15);z-index:-1}
+.cover-copy{position:absolute;inset:auto 17px 16px}
+.cover-copy .overline{display:inline-flex;gap:6px;align-items:center;color:#d3deff}
+.cover-copy i{width:6px;height:6px;border-radius:50%;background:#8ea6ff}
+.cover h3,.poster h3,.schedule h3{font-size:clamp(34px,4.1vw,52px);letter-spacing:-.08em;line-height:1.02;margin:6px 0}
+.meta{display:flex;flex-wrap:wrap;gap:6px 13px;margin:9px 0 14px;font-size:13px}
+.cover .meta{color:#e2e7f4}
+.cover .start{border-radius:7px}
+.schedule{padding:9px 17px 0}
+.schedule .overline{color:var(--brand)}
+.schedule h3{font-family:"Songti SC",STSong,serif;font-size:43px;margin:7px 0 15px}
+.schedule-main{height:313px;display:grid;grid-template-columns:39% 61%;position:relative;background:#eadfd1;border-radius:125px 125px 12px 12px;overflow:hidden}
+.schedule-main img{grid-column:2;object-position:60% 50%}
+.schedule-copy{position:absolute;inset:auto auto 20px 14px}
+.schedule h4{font-family:"Songti SC",STSong,serif;font-size:44px;margin:10px 0;line-height:1.02;letter-spacing:-.08em}
+.schedule .meta{display:grid;gap:5px;margin:0;color:#483944;font-size:12px}
+.schedule .start{margin-top:12px;border-radius:99px}
+.theme-c .bar{border-bottom:1px solid var(--fg)}
+.poster{padding:10px 15px 0}
+.poster-heading{display:flex;flex-direction:column}
+.poster .overline{color:var(--brand)}
+.poster h3{font-weight:950;margin:5px 0 10px}
+.poster-art{height:277px;position:relative;overflow:hidden;background:#ed301b;border:1px solid var(--fg)}
+.poster-art img{object-fit:cover;object-position:center top}
+.poster-art>span{position:absolute;left:10px;top:8px;font:900 47px/.8 Arial,sans-serif;letter-spacing:-.09em;color:#ffedc8}
+.poster-art small{display:block;font-size:11px;letter-spacing:.1em;margin:8px 0 0 3px}
+.poster-meta{display:flex;justify-content:space-between;margin:0;padding:8px 0;border-bottom:1px solid var(--fg);font-size:12px;font-weight:700}
+.poster .start{margin-top:10px}
+.extras{padding:0 17px;flex:1;min-height:0}
+.week{padding:10px 0 8px;border-bottom:1px solid var(--line)}
+.week>div:first-child{display:flex;justify-content:space-between;align-items:center}
+.week h3{font-size:15px;margin:0}
+.text{font-size:11px;color:var(--muted);min-height:32px}
+.week-stats{display:flex;gap:20px;color:var(--muted);font-size:12px}
+.week-stats b{color:var(--fg);font-size:24px;font-weight:820;letter-spacing:-.06em}
+.coach{width:100%;display:flex;align-items:center;text-align:left;gap:9px;min-height:50px}
+.coach-icon{display:grid;place-items:center;width:29px;height:29px;border:1px solid var(--line);border-radius:50%}
+.coach-icon svg{width:16px;height:16px}
+.coach>span:nth-child(2){flex:1;display:flex;flex-direction:column;gap:2px}
+.coach b{font-size:12px}
+.coach small{font-size:10px;color:var(--muted)}
+.coach>svg{width:15px;height:15px}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);padding:3px 10px 5px;margin-top:auto;background:var(--bg)}
+.tabs button{display:grid;justify-items:center;align-content:center;gap:4px;min-height:48px;color:var(--muted);font-size:10px}
+.tabs [aria-current]{color:var(--fg);font-weight:800}
+.tabs [aria-current] svg{stroke-width:2.5}
+dialog{width:min(390px,calc(100% - 32px));max-height:calc(100% - 24px);padding:0;border:1px solid var(--line);border-radius:22px;background:var(--bg);color:var(--fg)}
+dialog::backdrop{background:#141319a0}
+.sheet{padding:22px}
+.sheet h2{margin:8px 0 12px;font-size:30px;letter-spacing:-.05em}
+.sheet p{line-height:1.6}
+.sheet .close{float:right;width:44px;height:44px;background:transparent;border:1px solid var(--line);color:var(--fg);border-radius:50%;font-size:24px}
+.sheet ol{list-style:none;margin:16px 0;padding:0}
+.sheet li{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding:12px 0}
+.sheet small{color:var(--muted)}
+.sheet .start{border-radius:8px;margin-top:18px}
+@media(max-width:990px){
+  .review{padding-inline:16px}
+  .options{gap:12px}
+  .label p{display:none}
+}
+@media(max-width:850px){
+  .options{grid-template-columns:1fr;justify-items:center;gap:25px}
+  .option{width:min(100%,390px)}
+  .label p{display:block}
+  .intro{align-items:start;flex-direction:column;gap:9px}
+  .intro>p br{display:none}
+  .cover h3,.poster h3{font-size:48px}
+}

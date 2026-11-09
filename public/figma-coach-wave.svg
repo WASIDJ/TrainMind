@@ -1,0 +1,11 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="34" height="34" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="coach/wave" clip-path="url(#clip0_0_11)">
+<path id="Vector" d="M17 33C25.8366 33 33 25.8366 33 17C33 8.16344 25.8366 1 17 1C8.16344 1 1 8.16344 1 17C1 25.8366 8.16344 33 17 33Z" fill="#102B36" stroke="#21D9AB"/>
+<path id="Vector_2" d="M5 17H9L11 12L15 23L18 9L21 17H24L26 13L29 17H30" stroke="#21D9AB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<defs>
+<clipPath id="clip0_0_11">
+<rect width="34" height="34" fill="white"/>
+</clipPath>
+</defs>
+</svg>

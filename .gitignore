@@ -1,0 +1,26 @@
+# B2:真实用户数据与运行产物,永不入库
+# 活库与备份(含真机语音转写,见 2026-11-06 审查 B2)
+trainmind.db*
+*.bak*
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# 日志
+*.log
+
+# 真机验收产物与浏览器 profile
+device-acceptance/
+test/chrome-e2e-profile/
+
+# 系统
+.DS_Store
+
+# 密钥(脚本已改为从 ~/.trainmind.env 读取,仓库内不应再出现)
+*.env
+.env.*
+
+# Python 字节码(测试会 import tools/stt-sidecar.py,生成 __pycache__)
+__pycache__/
+*.pyc
