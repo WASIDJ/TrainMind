@@ -150,13 +150,26 @@ if (existsSync(importedPath)) for (const knowledge of JSON.parse(readFileSync(im
   if (!(["vertical_pull", "horizontal_pull", "horizontal_push", "squat", "hip_extension", "arm_curl", "arm_extension", "scapular_control", "core_stability", "conditioning", "mobility"] as string[]).includes(knowledge.movementPattern)) continue;
   exercises.push({ id: knowledge.id, name: knowledge.localizedNames["zh-CN"] ?? knowledge.canonicalName, movementPattern: knowledge.movementPattern as MovementPattern, primaryMuscles: knowledge.primaryMuscles, secondaryMuscles: knowledge.secondaryMuscles, equipmentIds: knowledge.equipment, requiredEquipmentIds: knowledge.equipment, environments: knowledge.environment.filter((x): x is Environment => ["home", "office", "gym"].includes(x)), difficulty: knowledge.difficulty, defaultSets: knowledge.defaultSetRange[0], minSets: knowledge.defaultSetRange[0], maxSets: knowledge.defaultSetRange[1], defaultReps: knowledge.defaultRepRange ? `${knowledge.defaultRepRange[0]}-${knowledge.defaultRepRange[1]}` : "60秒", repOrTimeBased: knowledge.repOrTimeBased, attentionLevel: knowledge.attentionLevel, substitutionTags: [knowledge.movementPattern], contraindicationTags: [], instructions: knowledge.instructions, voiceCues: knowledge.voiceCues, source: knowledge.source, sourceId: knowledge.sourceId, sourceLicense: knowledge.sourceLicense });
 }
+// RepDB 条目在原始数据里没有 contraindicationTags（实测 80 条全缺）。空数组意味着
+// 这些动作**永远不会**因为用户膝/腰/肩限制被排除 —— 安全上是条缝（2026-11-09 复核发现）。
+// 这里按动作模式保守推导，宁可少排也不要给禁忌部位上负荷；自研动作仍用自己的手写标签。
+const PATTERN_CONTRAINDICATIONS: Partial<Record<MovementPattern, string[]>> = {
+  squat: ["knee_pain"],
+  lunge: ["knee_pain"],
+  hinge: ["low_back_pain"],
+  hip_extension: ["low_back_pain"],
+  vertical_push: ["shoulder_pain"],
+  horizontal_push: ["shoulder_pain"],
+  vertical_pull: ["shoulder_pain"],
+};
+const contraindicationsFor = (pattern: MovementPattern): string[] => [...(PATTERN_CONTRAINDICATIONS[pattern] ?? [])];
 const repDbPath = new URL("../knowledge/exercises.repdb.json", import.meta.url);
 if (existsSync(repDbPath)) for (const knowledge of JSON.parse(readFileSync(repDbPath, "utf8")) as KnowledgeExercise[]) {
   assertKnowledgeExercise(knowledge);
   if (knowledge.reviewStatus !== "reviewed" || !knowledge.attributionRequired || exercises.some(x => x.id === knowledge.id)) continue;
   const timed = knowledge.movementPattern === "mobility" || knowledge.movementPattern === "conditioning" || /hold|plank|carry/i.test(knowledge.id);
   const defaultReps = timed ? "30秒" : knowledge.movementPattern === "calf" ? "12-15" : knowledge.movementPattern.startsWith("core_") ? "8-12" : "8-12";
-  exercises.push({ id: knowledge.id, name: knowledge.localizedNames["zh-CN"] ?? knowledge.canonicalName, aliases: knowledge.aliases, movementPattern: knowledge.movementPattern as MovementPattern, primaryMuscles: knowledge.primaryMuscles, secondaryMuscles: knowledge.secondaryMuscles, equipmentIds: knowledge.equipment, requiredEquipmentIds: knowledge.equipment, environments: knowledge.environment.filter((x): x is Environment => ["home", "office", "gym"].includes(x)), difficulty: knowledge.difficulty, unilateral: knowledge.unilateral, defaultSets: 2, minSets: 1, maxSets: 3, defaultReps, repOrTimeBased: timed ? "time" : "reps", attentionLevel: knowledge.difficulty === "beginner" ? "medium" : "high", substitutionTags: [knowledge.movementPattern, ...knowledge.equipment], contraindicationTags: [], instructions: knowledge.instructions, bodyRegion: knowledge.bodyRegion, position: knowledge.position, impactLevel: knowledge.impactLevel, compoundOrIsolation: knowledge.compoundOrIsolation, progressions: knowledge.progressions, regressions: knowledge.regressions, voiceCues: knowledge.voiceCues, source: knowledge.source, sourceId: knowledge.sourceId, sourceCommit: knowledge.sourceCommit, sourceLicense: knowledge.sourceLicense, attributionRequired: true });
+  exercises.push({ id: knowledge.id, name: knowledge.localizedNames["zh-CN"] ?? knowledge.canonicalName, aliases: knowledge.aliases, movementPattern: knowledge.movementPattern as MovementPattern, primaryMuscles: knowledge.primaryMuscles, secondaryMuscles: knowledge.secondaryMuscles, equipmentIds: knowledge.equipment, requiredEquipmentIds: knowledge.equipment, environments: knowledge.environment.filter((x): x is Environment => ["home", "office", "gym"].includes(x)), difficulty: knowledge.difficulty, unilateral: knowledge.unilateral, defaultSets: 2, minSets: 1, maxSets: 3, defaultReps, repOrTimeBased: timed ? "time" : "reps", attentionLevel: knowledge.difficulty === "beginner" ? "medium" : "high", substitutionTags: [knowledge.movementPattern, ...knowledge.equipment], contraindicationTags: contraindicationsFor(knowledge.movementPattern as MovementPattern), instructions: knowledge.instructions, bodyRegion: knowledge.bodyRegion, position: knowledge.position, impactLevel: knowledge.impactLevel, compoundOrIsolation: knowledge.compoundOrIsolation, progressions: knowledge.progressions, regressions: knowledge.regressions, voiceCues: knowledge.voiceCues, source: knowledge.source, sourceId: knowledge.sourceId, sourceCommit: knowledge.sourceCommit, sourceLicense: knowledge.sourceLicense, attributionRequired: true });
   substitutionGraph[knowledge.id] = knowledge.substitutions;
 }
 const cueProfiles = JSON.parse(readFileSync(new URL("../knowledge/voice-cue-profiles.json", import.meta.url), "utf8")).profiles as Record<string, VoiceCues>;

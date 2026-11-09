@@ -119,3 +119,19 @@ test("stimulus resolution is deterministic and prescriptions avoid duplicate exe
   assert.ok(workout.prescription.decisionReasons?.some(x => x.type === "knowledge"));
   assert.ok(workout.prescription.ruleIds.every(id => trainingKnowledge.rules.some(x => x.id === id) || ["session_movement_coverage_v0", "target_rir_v0", "set_range_v0", "progression_requires_history_v0", "duration_recipe_v0"].includes(id)));
 });
+
+// 2026-11-09：RepDB 条目在原始数据里没有 contraindicationTags（80 条全缺），
+// 空数组 = 永远不会因为膝/腰/肩限制被排除。按动作模式保守推导补上，自研动作保持原样。
+test("RepDB 动作补齐禁忌标签，自研动作不受影响", () => {
+  const repdbSquat = exercises.find(x => x.id === "box-squat");
+  assert.ok(repdbSquat, "RepDB 的箱式深蹲应该在动作池里");
+  assert.deepEqual(repdbSquat!.contraindicationTags, ["knee_pain"], "深蹲类必须带 knee_pain");
+
+  const repdbHinge = exercises.find(x => x.id === "bodyweight-good-morning");
+  assert.ok(repdbHinge, "RepDB 的徒手早安式应该在池里");
+  assert.deepEqual(repdbHinge!.contraindicationTags, ["low_back_pain"], "髋铰链类必须带 low_back_pain");
+
+  const authored = exercises.find(x => x.id === "bodyweight-squat")!;
+  assert.deepEqual(authored.contraindicationTags, ["knee_pain"], "自研动作维持手写标签");
+  assert.equal(authored.attributionRequired, false, "自研动作不带 RepDB 署名标记");
+});
