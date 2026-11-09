@@ -77,6 +77,7 @@ if (mobileMode) console.log(`Mobile access key: ${mobileAccessKey}`);
 const htmlPath = fileURLToPath(new URL("../public/index.html", import.meta.url));
 const atmospherePath = fileURLToPath(new URL("../public/workout-atmosphere.png", import.meta.url));
 const svgAssets = new Set(["training-art.svg", "figma-coach-wave.svg", "figma-demo-bench.svg", "figma-adjust-old.svg", "figma-adjust-new.svg", "plan-bench.svg", "plan-incline.svg", "plan-cable.svg", "plan-curl.svg", "plan-pushdown.svg", "tm-d5f35.svg", "tm-39cd6.svg", "tm-08af3.svg", "tm-2df75.svg", "tm-a0f7d.svg", "tm-bec5d.svg", "tm-97a73.svg", "tm-dca19.svg", "tm-8f912.svg", "tm-8a1f9.svg", "tm-d5578.svg", "tm-c92a0.svg", "tm-c5779.svg", "tm-359a2.svg"]);
+const coachMedia = new Set(["lin-squat.jpg", "lin-hinge.jpg", "lin-pushup.jpg", "lin-cover.jpg", "su-cover.jpg", "yue-cover.jpg"]);
 const json = (res: import("node:http").ServerResponse, status: number, body: unknown) => {
   // A5(2026-11-09):头已发时再写会抛 ERR_HTTP_HEADERS_SENT,而该异常发生在全局 catch 内部,没人接。
   if (res.headersSent || res.writableEnded) return;
@@ -255,6 +256,30 @@ function prepareWorkout(session: WorkoutSession) {
   return session;
 }
 // 取这场训练最近一条已落库的组记录(用于"事后补充反馈")
+
+// ── D26(2026-11-09, owner 要求):"和 AI 聊完生成编排好的计划" ──
+// 多轮编排的槽位(周期/频率/器械/时长/目标)一律由**规则**从多轮对话里收,
+// 缺哪个只问那一个;收齐了才给"开始课程"。LLM 只负责怎么说,永不决定参数。
+// 这样"聊出来的课程"和"首页排的一场"走同一套建课接口,剂量仍由规则层算。
+const PROGRAM_SLOT_QUESTIONS: Record<string, string> = {
+  sessionsPerWeek: "一周想练几次？3 次是个能坚持的开始。",
+  equipment: "在家还是去健身房？手边有哑铃或弹力带吗？（只有自重也可以）",
+};
+function collectProgramSlots(text: string) {
+  const cn: Record<string, number> = { 一: 1, 两: 2, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8 };
+  const num = (s: string | undefined) => (s === undefined ? undefined : /^\d+$/.test(s) ? Number(s) : cn[s]);
+  const weeks = num(text.match(/(?:(\d{1,2})|[一二两三四五六七八])\s*周/)?.[1] ?? text.match(/([一二两三四五六七八])\s*周/)?.[1]);
+  const perWeek = num(text.match(/(?:每周|一周|一个星期)\s*(?:练|训练)?\s*(\d|[一二两三四五六])/)?.[1]);
+  const minutes = num(text.match(/(\d{1,3})\s*分钟/)?.[1]);
+  const equipment = /哑铃/.test(text) ? ["dumbbell"] : /弹力带|阻力带/.test(text) ? ["band"] : /徒手|自重|没有器械|没器械|无器械/.test(text) ? ["bodyweight"] : undefined;
+  const environment: "home" | "gym" | "office" = /健身房|去练|器械齐全/.test(text) ? "gym" : /办公室/.test(text) ? "office" : "home";
+  const goal = /下肢|练腿|腿部/.test(text) ? "想练下肢" : /恢复|放松|活动一下/.test(text) ? "想做恢复训练" : "想练全身";
+  const missing = [perWeek === undefined ? "sessionsPerWeek" : null, equipment === undefined ? "equipment" : null].filter((x): x is string => Boolean(x));
+  return { slots: { weeks, sessionsPerWeek: perWeek, targetMinutes: minutes, equipment, environment, goal }, missing };
+}
+function wantsProgramPlan(message: string) {
+  return /(排|安排|制定|做|定|设计).{0,6}(计划|课程|方案|训练安排)|(每周|一周).{0,4}(练|训练)|\d\s*周|[一二两三四五六七八]\s*周/.test(message);
+}
 function latestSetRecordFor(sessionId: string): { id: string; record: SetRecord } | null {
   const row = db.prepare("SELECT id, data_json FROM set_records WHERE json_extract(data_json, '$.sessionId') = ? ORDER BY json_extract(data_json, '$.completedAt') DESC LIMIT 1").get(sessionId) as { id: string; data_json: string } | undefined;
   if (!row) return null;
@@ -460,7 +485,6 @@ const server = createServer(async (req, res) => {
       const mime = url.pathname.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8";
       return sendFile(res, mime, new URL(`../public${url.pathname}`, import.meta.url), "no-cache");
     }
-    const coachMedia = new Set(["lin-squat.jpg", "lin-hinge.jpg", "lin-pushup.jpg", "lin-cover.jpg", "su-cover.jpg", "yue-cover.jpg"]);
     if (req.method === "GET" && url.pathname.startsWith("/coach-media/") && coachMedia.has(url.pathname.slice("/coach-media/".length))) {
       return sendFile(res, "image/jpeg", new URL(`../public${url.pathname}`, import.meta.url), "public, max-age=86400");
     }
@@ -712,6 +736,24 @@ const server = createServer(async (req, res) => {
       const sessionId = coachMatch?.[1] ?? input.sessionId;
       const session = typeof sessionId === "string" && sessionId ? loadSession(sessionId) : undefined;
       const history = Array.isArray(input.history) ? input.history.slice(-8).filter(x => x && ["user", "assistant"].includes(x.role) && typeof x.content === "string").map(x => ({ role: x.role, content: x.content.slice(0, 500) })) : [];
+      // 场外多轮编排:命中就走规则(槽位由 collectProgramSlots 收),不调 LLM ——
+      // 演示里这一步必须"立刻回",不能被模型延迟拖住;参数也绝不交给模型猜。
+      // 多轮续接:用户第二句往往只是"每周三次"这种回答,不含"计划"二字,
+      // 所以还要看历史里上一问是不是我们自己的槽位提问,否则会掉回自由对话。
+      const slotQuestions = Object.values(PROGRAM_SLOT_QUESTIONS);
+      const inProgramFlow = history.some(x => x.role === "assistant" && slotQuestions.some(q => x.content.includes(q)));
+      if (!session && (wantsProgramPlan(input.message) || inProgramFlow)) {
+        const said = [...history.filter(x => x.role === "user").map(x => x.content), input.message].join("，");
+        const { slots, missing } = collectProgramSlots(said);
+        const programProposal = missing.length ? null : {
+          weeks: slots.weeks ?? 4, sessionsPerWeek: slots.sessionsPerWeek!, targetMinutes: slots.targetMinutes ?? 30,
+          equipment: slots.equipment!, goal: slots.goal, environment: slots.environment,
+        };
+        const reply = programProposal
+          ? `${programProposal.weeks} 周 · 每周 ${programProposal.sessionsPerWeek} 次 · 每次 ${programProposal.targetMinutes} 分钟左右，目标是${programProposal.goal}。前两周建立动作模式，第三周加深，最后一周巩固；每一场的剂量仍然按你当天的状态算。要开始就说一声，我把它放进你的课程。`
+          : PROGRAM_SLOT_QUESTIONS[missing[0]!]!;
+        return json(res, 200, { reply, mode: "program_proposal", programProposal, programSlotsMissing: missing, status: null });
+      }
       const result = await replyToCoach(session, input.message.trim(), history);
       return json(res, 200, { ...result, status: session?.status ?? null });
     }

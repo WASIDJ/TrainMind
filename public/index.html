@@ -9,7 +9,7 @@ const urlUser=new URLSearchParams(location.search).get('user');if(urlUser&&/^[a-
 let userId=localStorage.getItem('trainmind-user-id')||'demo-user';
 // 手机测试入口:URL 带 ?k=口令 时直接存下,免去每次解锁都要手输(x-mobile-key)
 try{const urlKey=new URLSearchParams(location.search).get('k');if(urlKey)localStorage.setItem('trainmind-mobile-key',urlKey)}catch{}const labels={gym:'健身房',home:'居家',office:'办公室',moderate:'中等',low:'低强度',high:'高强度'};document.querySelector('.avatar').onclick=()=>{const next=prompt('训练者 ID（例如 tester-a）',userId);if(next&&/^[a-zA-Z0-9_-]{1,40}$/.test(next.trim())){userId=next.trim();localStorage.setItem('trainmind-user-id',userId);location.reload()}else if(next)alert('请使用 1–40 位英文、数字、连字符或下划线。')};
-let voiceState='idle',voiceCaption='',recognition=null,voiceToken=0,cadenceMs=3000,cadenceTimer=null,repCount=0,actualRepsOverride=null,actionBusy=false,voiceEnabled=false,voicePermissionReady=false,autoListenTimer=null,pendingRestCue='',lastTrainingCue='',repProgressKey='',guideRepCount=0,localRecognitionReady=false,listenRetries=0,coachBusy=false,coachTurn=0;let coachHistory=[],offlineSpeechAvailable=false,offlineRecorder=null,cadenceActive=false,cadenceEpoch=0,voiceInputTarget='coach',voiceCapabilityPromise=null,coachRequest=null,coachError=null;
+let voiceState='idle',voiceCaption='',recognition=null,voiceToken=0,cadenceMs=3000,cadenceTimer=null,repCount=0,actualRepsOverride=null,actionBusy=false,voiceEnabled=false,voicePermissionReady=false,autoListenTimer=null,pendingRestCue='',lastTrainingCue='',repProgressKey='',guideRepCount=0,localRecognitionReady=false,listenRetries=0,coachBusy=false,coachTurn=0;let coachHistory=[],offlineSpeechAvailable=false,offlineRecorder=null,cadenceActive=false,cadenceEpoch=0,voiceInputTarget='coach',voiceCapabilityPromise=null,coachRequest=null,coachError=null,coachProposal=null;
 let pageGeneration=0,sessionGeneration=0,sessionIdentity=null,actionGeneration=0,lifecycleSuspended=false,lifecyclePausePromise=null,lifecycleError='';
 const suspendedSessionKey='trainmind-suspended-session';
 function viewStamp(){const id=workout?.sessionId??null;if(id!==sessionIdentity){sessionIdentity=id;sessionGeneration++}return{page:pageGeneration,session:sessionGeneration,id,screen:document.querySelector('.shell').dataset.screen}}
@@ -365,6 +365,20 @@ function updateCoachHistory(){
   const log=document.querySelector('#coach-history');if(!log)return;
   const turns=document.querySelector('.coach-screen')?coachHistory:coachHistory.slice(-4);
   log.innerHTML=turns.map(x=>`<p class="${x.role}"><strong>${x.role==='user'?'你':'教练'}：</strong>${esc(x.content)}</p>`).join('')+(coachError?`<div class="error" role="alert"><strong>这条消息没有收到回复</strong><p>${esc(coachError.message)}</p><div class="actions"><button id="retry-coach" class="secondary">重试这条消息</button><button id="fix-coach-settings" class="secondary">修改模型配置</button></div></div>`:coachBusy?'<p role="status">教练正在回复…</p>':'');
+  // D26:教练把课程排好后,在对话里给一个"开始"出口 —— 聊完的下一步不是继续聊,是开练
+  if(coachProposal&&document.querySelector('.coach-screen')&&!document.querySelector('#proposal-card')){
+    const card=document.createElement('div');card.id='proposal-card';card.className='tm-note lavender';
+    card.innerHTML='<strong>计划排好了</strong><p>'+coachProposal.weeks+' 周 · 每周 '+coachProposal.sessionsPerWeek+' 次 · 每次约 '+coachProposal.targetMinutes+' 分钟</p><button id="start-proposal" style="width:100%;margin-top:8px">就按这个来，开始第 1 周</button><p class="home-suggestion" style="margin-top:6px">开始后每天按课程打卡，进度自己会累计。</p>';
+    log.appendChild(card);
+    card.querySelector('#start-proposal').onclick=async()=>{
+      const b=card.querySelector('#start-proposal');b.disabled=true;b.textContent='正在建课程…';
+      try{
+        const made=await api('/api/programs',{userId,goal:coachProposal.goal,weeks:coachProposal.weeks,sessionsPerWeek:coachProposal.sessionsPerWeek,environment:coachProposal.environment,targetMinutes:coachProposal.targetMinutes,equipment:coachProposal.equipment});
+        const started=await api('/api/programs/'+encodeURIComponent(made.program.programId)+'/start',{userId});
+        coachProposal=null;setWorkout(started.workout);render();
+      }catch(e){b.disabled=false;b.textContent='就按这个来，开始第 1 周';card.insertAdjacentHTML('beforeend','<div class="error">'+esc(e.message)+'</div>')}
+    };
+  }
   const retry=document.querySelector('#retry-coach');if(retry)retry.onclick=()=>handleCoachInput(coachError.input,true,'touch');
   const settings=document.querySelector('#fix-coach-settings');if(settings)settings.onclick=()=>coachSettings(!!workout);
   const send=document.querySelector('#coach-form button');if(send)send.textContent=coachBusy?'回复中…':'发送';
@@ -386,6 +400,7 @@ async function handleCoachInput(raw,retry=false,source='voice'){
     const result=await api(sessionId?`/api/workouts/${sessionId}/coach`:'/api/coach',{message,history},true,request.signal);
     const currentState=workout?`${workout.status}:${workout.runtime.currentExerciseIndex}:${workout.runtime.currentSetNumber}`:'';
     if(turn!==coachTurn||workout?.sessionId!==sessionId||state!==currentState||document.querySelector('.shell').dataset.screen!==view)return;
+    coachProposal=result.programProposal||null;
     coachHistory.push({role:'assistant',content:result.reply});updateCoachHistory();speech.play(result.reply);
   }catch(error){if(turn===coachTurn&&error.name!=='AbortError'&&document.querySelector('.shell').dataset.screen===view){voiceState='coach_error';voiceCaption=error.message;coachError={input:message,message:error.message};voiceUI();updateCoachHistory()}}
   finally{if(coachRequest===request){coachBusy=false;coachRequest=null;updateCoachHistory()}}
@@ -688,8 +703,8 @@ async function trainingHub(showOverview=false){
   const page=pageGeneration;
   if(!workout){try{const {workout:active}=await api(`/api/workouts/active?userId=${encodeURIComponent(userId)}`);if(page!==pageGeneration)return;setWorkout(active)}catch{if(page!==pageGeneration)return}}
   if(!showOverview&&workout&&['preview','warming_up','exercise_active','set_feedback','resting','paused','cooling_down'].includes(workout.status))return render();
-  app.innerHTML='<section class="tm-screen course-screen"><header class="tm-header"><div class="eyebrow">训练计划</div><h1>按你的节奏练</h1><p>安排一场训练，或用几周时间建立习惯。</p></header><div class="tm-stack"><div id="saved-workout"></div><button class="tm-row" id="go-home"><div><strong>单场训练</strong><small>根据今天的状态生成训练计划</small></div><span class="chevron">↗</span></button><h3>多周课程</h3><div id="program-card"><div class="tm-empty">正在读取课程…</div></div></div></section>';
-  updateContinueCard();document.querySelector('#go-home').onclick=()=>home(true);loadProgram();
+  app.innerHTML='<section class="tm-screen course-screen"><header class="tm-header"><div class="eyebrow">我的课程</div><h1>按你的节奏练</h1><p>练一场，格子就亮一格。</p></header><div class="tm-stack"><div id="saved-workout"></div><div id="program-card"><div class="tm-empty">正在读取课程…</div></div><div id="checkin"></div></div></section>';
+  updateContinueCard();loadProgram();
 }
 // 多周课程:计划(模板)与执行(真实训练)分离,进度只认完成的场次
 async function loadProgram(){
@@ -706,13 +721,46 @@ async function loadProgram(){
       });
       return;
     }
-    const st=d.status;
-    host.innerHTML='<div class="tm-note lavender"><strong>'+esc(st.text)+'</strong><p>'+esc(d.program.title)+' · 下一场：'+esc(st.nextSession?st.nextSession.title:'课程已完成')+'</p>'+(st.nextSession?'<button id="start-program" style="margin-top:8px;width:100%">开始这一场</button>':'')+'</div>';
+    const st=d.status,done=new Map((d.program.completions||[]).map(c=>[c.programSessionId,c.completedAt])),byWeek={};
+    (d.program.sessions||[]).forEach(s=>{(byWeek[s.weekNumber]=byWeek[s.weekNumber]||[]).push(s)});
+    const path=Object.keys(byWeek).sort((a,b)=>a-b).map(w=>{
+      const meta=(d.program.weeks||[]).find(x=>x.weekNumber===+w)||{};
+      const nodes=byWeek[w].map(s=>{
+        const isDone=done.has(s.id),isNext=!!st.nextSession&&st.nextSession.id===s.id;
+        return '<div class="path-node" style="display:flex;align-items:center;gap:10px;padding:7px 0;opacity:'+(isDone||isNext?1:.5)+'"><span style="width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;background:'+(isDone?'var(--lime,#c8f560)':isNext?'var(--peach,#ffd9c9)':'transparent')+';border:1px solid rgba(0,0,0,.18)">'+(isDone?'✓':isNext?'●':'○')+'</span><span style="flex:1">'+esc(s.title)+'</span>'+(isDone?'<small style="opacity:.6">'+new Date(done.get(s.id)).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'})+'</small>':'')+'</div>';
+      }).join('');
+      return '<section style="padding:10px 0;border-top:1px solid rgba(0,0,0,.07)"><strong>第 '+w+' 周 · '+esc(meta.title||'')+'</strong><p class="home-suggestion" style="margin:2px 0 6px">'+esc(meta.focus||'')+'</p>'+nodes+'</section>';
+    }).join('');
+    host.innerHTML='<div class="tm-note lavender"><strong>'+esc(st.text)+'</strong><p>'+esc(d.program.title)+'</p>'+(st.nextSession?'<button id="start-program" style="margin-top:8px;width:100%">开始「'+esc(st.nextSession.title)+'」</button>':'<p>这门课程已经走完了，可以再开一门。</p>')+'</div><div class="tm-note"><strong>课程路径</strong>'+path+'</div>';
+    renderCheckin();
     const start=host.querySelector('#start-program');
     if(start)start.onclick=async()=>{
       start.disabled=true;
       try{const r=await api('/api/programs/'+encodeURIComponent(d.program.programId)+'/start',{userId});if(!host.isConnected)return;setWorkout(r.workout);render()}catch(e){host.insertAdjacentHTML('beforeend','<div class="error">'+esc(e.message)+'</div>');start.disabled=false}
     };
+  }catch(e){host.innerHTML='<div class="error">'+esc(e.message)+'</div>'}
+}
+// 打卡日历(owner 2026-11-09 要求,参照多邻国"路径+完成格子"):只用真实完成的场次点灯。
+// 明确不抄断签惩罚(streak freeze/repair,见 reverse-lab/duolingo 工作笔记 §四)——
+// 断了就从今天重新开始,不给压力。
+const dayKey=t=>{const d=new Date(t);return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()};
+async function renderCheckin(){
+  const host=document.querySelector('#checkin');if(!host)return;
+  try{
+    const [h,pr]=await Promise.all([
+      api('/api/history?userId='+encodeURIComponent(userId)),
+      api('/api/progress?userId='+encodeURIComponent(userId))
+    ]);
+    if(!host.isConnected)return;
+    const doneDays=new Set((h.sessions||[]).map(x=>dayKey(x.record?.completedAt||x.record?.startedAt)));
+    const cells=[];
+    for(let i=27;i>=0;i--){
+      const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()-i);
+      const k=dayKey(d),on=doneDays.has(k),today=i===0;
+      cells.push('<span title="'+k+(on?' · 练了':'')+'" style="width:100%;aspect-ratio:1;border-radius:6px;background:'+(on?'var(--lime,#c8f560)':'rgba(0,0,0,.07)')+';outline:'+(today?'1.5px solid rgba(0,0,0,.4)':'none')+'"></span>');
+    }
+    const streak=pr.relationship?.streakWeeks??0,weekSessions=pr.volume?.thisWeek?.sessions??0;
+    host.innerHTML='<div class="tm-note"><strong>打卡</strong><p>连续 '+streak+' 周 · 本周已练 '+weekSessions+' 场</p><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:8px">'+cells.join('')+'</div><p class="home-suggestion" style="margin-top:8px">练完一场就亮一格。断了不用补签，从今天重新开始就行。</p></div>';
   }catch(e){host.innerHTML='<div class="error">'+esc(e.message)+'</div>'}
 }
 
@@ -829,7 +877,36 @@ function home(intent=false){
   const showIntent=()=>{dashboard.hidden=true;document.querySelector('#intent-panel').hidden=false;document.querySelector('.shell').dataset.view='intent';document.querySelector('#intent-actions').hidden=false;document.querySelector('#home-mic').hidden=false;if(!input.value)input.value='30分钟，我在家，徒手自重，想练全身，精力充沛';updateInput();app.scrollTop=0};
   document.querySelector('#generate-plan').onclick=showIntent;document.querySelector('#submit-plan').onclick=()=>document.querySelector('#create').requestSubmit();
   for(const [id,step] of [['duration-minus',-5],['duration-plus',5]])document.querySelector('#'+id).onclick=()=>{const minutes=Math.max(5,Math.min(120,Number(input.value.match(/(\d+)\s*分钟/)?.[1]??30)+step));input.value=/\d+\s*分钟/.test(input.value)?input.value.replace(/\d+\s*分钟/,minutes+'分钟'):minutes+'分钟，'+input.value;updateInput()};
-  if(intent===true)showIntent();
+  if(intent===true)showIntent();else applyHomeCta();
+// 多邻国原则(2026-11-09 逆向笔记 §一):一屏只有一个主 CTA —— 有课程就"继续下一场",
+// 没有课程才"排今天的训练";第二条路降级成一行文字,不再和主按钮并列抢注意力。
+async function applyHomeCta(){
+  const btn=document.querySelector('#generate-plan'),hero=document.querySelector('.session-hero');
+  if(!btn||!hero)return;
+  try{
+    const d=await api('/api/programs/active?userId='+encodeURIComponent(userId));
+    if(!btn.isConnected||document.querySelector('.shell').dataset.screen!=='home')return;
+    if(!d.program||!d.status?.nextSession)return;
+    const st=d.status,h2=hero.querySelector('h2'),p=hero.querySelector('p');
+    if(h2)h2.innerHTML='继续，<br>第 '+st.weekNumber+' 周';
+    if(p)p.textContent=st.text;
+    btn.innerHTML='继续这一场 <span aria-hidden="true">↗</span>';
+    btn.onclick=async()=>{
+      if(btn.disabled)return;btn.disabled=true;btn.textContent='正在准备…';
+      try{const r=await api('/api/programs/'+encodeURIComponent(d.program.programId)+'/start',{userId});setWorkout(r.workout);render()}
+      catch(e){btn.disabled=false;btn.innerHTML='继续这一场 <span aria-hidden="true">↗</span>';const er=document.querySelector('#error');if(er)er.innerHTML='<div class="error">'+esc(e.message)+'</div>'}
+    };
+    const kicker=hero.querySelector('.session-kicker');
+    if(kicker&&!hero.querySelector('#solo-link')){
+      const link=document.createElement('button');
+      link.id='solo-link';link.type='button';link.className='text-button';
+      link.style.cssText='margin-top:10px;background:none;border:0;padding:0;font-size:13px;color:inherit;opacity:.65;cursor:pointer';
+      link.textContent='今天不跟课程，单独排一场 ↗';
+      link.onclick=()=>home(true);
+      kicker.after(link);
+    }
+  }catch{}
+}
   const homeMic=document.querySelector('#home-mic');
   homeMic.onclick=async()=>{
     if(offlineRecorder&&voiceInputTarget==='home'){offlineRecorder.finish(true);return}
