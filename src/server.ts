@@ -17,6 +17,8 @@ import { narrate, slotOf, RED_FLAG, RED_FLAG_TEXT, buildMemoryFacts, type Memory
 import { classifyStopIntent, probeStopPrompt, parseCoachReport } from "./coach-runtime.ts"; // 喊停三段式:疲惫先问原因再收工
 import { applyLateFeedback } from "./core.ts"; // D17:组后补充反馈(不报错、真生效)
 import { CUE_TEMPLATES } from "./perception.js"; // 组内听觉感知 v1:时机引擎话术锚点(纯 JS,前后端共用)
+import { detectSource, matchExercise, parseDoseText, assessItem, summarizePlan } from "./import-plan.ts"; // D27:把别人的计划拆成我们的结构
+import { fetchBilibiliMeta, fetchYoutubeMeta, transcribeMedia } from "./import-fetch.ts"; // D27:链接 → 文字（元信息优先，转写兜底）
 import { exerciseProgress, progressSummary, relationship, nudgeFor, weeklyVolume, type Relationship } from "./progress.ts"; // 进步叙事 + 关系进度
 import { buildProgram, programStatus, recordCompletion, weekOverWeek, type Program } from "./program.ts"; // 多周课程 + 计划/执行分离
 import { agencyChoiceFromSpeech } from "./core.ts";
@@ -783,6 +785,74 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { ok: true, text, trigger, speak });
     }
     if (req.method === "GET" && /^\/api\/exercises\/[^/]+$/.test(url.pathname)) { const exercise = exercises.find(x => x.id === url.pathname.split("/")[3] && !x.attributionRequired); return exercise ? json(res, 200, { exercise }) : json(res, 404, { error: "动作不存在。" }); }
+    // ── D27(2026-11-09, owner 要求):把别人的计划（链接/文字）拆成我们的结构 ──
+    // 只做"读懂 + 判断适不适合"，不直接落库；落库要用户确认（见 docs 里 D27 说明）。
+    if (req.method === "POST" && url.pathname === "/api/import/analyze") {
+      const input = await body(req);
+      const raw = typeof input.input === "string" ? input.input.trim() : "";
+      if (!raw) return json(res, 400, { error: "把链接或计划文字粘进来。" });
+      if (raw.length > 8000) return json(res, 400, { error: "太长了，先截到 8000 字以内。" });
+      const userId = typeof input.userId === "string" && input.userId ? input.userId : "demo-user";
+      requestUserId = userId;
+      const source = detectSource(raw);
+      let text = raw, title = "", viaLink = false, transcripted = false, note: string | undefined;
+      if (source?.autoFetch) {
+        try {
+          const meta = source.platform === "bilibili" ? await fetchBilibiliMeta(source.id!) : await fetchYoutubeMeta(source.id!);
+          title = meta.title;
+          text = [meta.title, meta.desc].filter(Boolean).join("\n");
+          viaLink = true;
+          if (!meta.hasText && input.transcribe !== false) {
+            const tr = await transcribeMedia(source.url);
+            if (tr) { text = `${text}\n${tr}`; transcripted = true; }
+            else note = "这个视频没有可读的文字说明，也没能转写出口播内容。把教练发的计划文字粘进来一样能分析。";
+          }
+        } catch (error) {
+          note = `没能读取这个链接（${error instanceof Error ? error.message : "未知错误"}）。把计划文字粘进来一样能分析。`;
+        }
+      }
+      if (!text.trim()) return json(res, 422, { error: note ?? "没有可用文字。" });
+      // LLM 只做"抽结构"，判断与剂量一律走下面的规则层
+      let extracted: { title?: string; items?: Array<{ name?: string; dose?: string; note?: string }> } | null = null;
+      try {
+        const out = await modelReply([
+          { role: "system", content: "你只做信息抽取。从给定文本里找出训练计划，输出严格 JSON，不要解释、不要 markdown 代码块。格式：{\"title\":\"计划名\",\"items\":[{\"name\":\"动作中文名\",\"dose\":\"3组×12次 或 2组×30秒\",\"note\":\"原文里的关键提示，没有就省略\"}]}。只抽原文明确写到的动作；没有计划信息就输出 {\"items\":[]}。" },
+          { role: "user", content: text.slice(0, 4000) },
+        ], 900);
+        const start = out.indexOf("{"), end = out.lastIndexOf("}");
+        extracted = start >= 0 && end > start ? JSON.parse(out.slice(start, end + 1)) : null;
+      } catch { extracted = null; }
+      if (!extracted) return json(res, 502, { error: "模型没能从这段内容里读出训练计划。可以只粘「动作 + 组数 + 次数」那几行再试。", note });
+      const rawItems = (extracted.items ?? []).filter(x => x && typeof x.name === "string" && x.name.trim()).slice(0, 20);
+      if (!rawItems.length) return json(res, 422, { error: note ?? "这段内容里没找到明确的训练动作。", source, title });
+      // 用户上下文：只读"最近一次会话上下文"（限制/器械/环境），没有就用缺省
+      const ctxRow = db.prepare("SELECT data_json FROM session_contexts WHERE user_id = ? ORDER BY created_at DESC LIMIT 1").get(userId) as { data_json: string } | undefined;
+      const lastCtx = ctxRow ? JSON.parse(ctxRow.data_json) as any : null;
+      const userModel = buildUserTrainingModel(userId, {
+        sessions: userSessions(userId),
+        sets: (db.prepare("SELECT data_json FROM set_records").all() as any[]).map(r => JSON.parse(r.data_json)),
+        trainingRecords: (db.prepare("SELECT session_id, data_json FROM training_records WHERE user_id = ?").all(userId) as any[]).map(r => JSON.parse(r.data_json)),
+      });
+      const assessCtx = {
+        restrictions: (lastCtx?.restrictions ?? []) as string[],
+        availableEquipment: (typeof input.equipment === "object" && Array.isArray(input.equipment) ? input.equipment : lastCtx?.availableEquipmentIds) as string[] | undefined,
+        environment: String(input.environment ?? lastCtx?.environment ?? "home"),
+      };
+      const items = rawItems.map(x => {
+        const name = x.name!.trim();
+        const dose = parseDoseText(x.dose);
+        const matched = matchExercise(name, exercises);
+        const cap = matched ? userModel.exerciseCapabilities[matched.id] : undefined;
+        const repRange = cap?.estimatedWorkingReps ? { min: Math.max(1, cap.estimatedWorkingReps - 2), max: cap.estimatedWorkingReps + 2 } : undefined;
+        const assessment = assessItem({ name, dose }, matched, { ...assessCtx, repRange });
+        return { name, dose, doseText: x.dose ?? null, note: x.note ?? null, matchedName: matched?.name ?? null, ...assessment };
+      });
+      return json(res, 200, {
+        source: source ?? null, title: extracted.title ?? title ?? null, viaLink, transcripted, note: note ?? null,
+        excerpt: text.slice(0, 400),
+        items, summary: summarizePlan(items.map(i => ({ verdict: i.verdict } as any))),
+      });
+    }
     if (req.method === "POST" && url.pathname === "/api/workouts/preview") {
       // A10/D24(2026-11-09):真实用户练出来的场次必须记 human —— 缺省值以前是 demo,
       // 导致首页"生成计划"的每一场真练都被打上演示数据,实验看板里一条 human 都没有。

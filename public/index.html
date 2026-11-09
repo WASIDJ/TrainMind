@@ -775,6 +775,28 @@ async function profilePage(){
     document.querySelector('#profile-coach-settings').onclick=()=>coachSettings('profile');document.querySelector('#switch-user').onclick=()=>document.querySelector('.avatar').click();
   }catch(error){if(screen.isConnected)screen.insertAdjacentHTML('beforeend','<div class="error">'+esc(error.message)+'</div>')}
 }
+// D27（2026-11-09，owner 要求）：导入别人的计划（B站/YouTube 链接或直接贴文字）。
+// 只做"读懂 + 判断适不适合"，绝不替用户决定练什么；判定与剂量建议全部来自规则层。
+async function importPage(){
+  try{leaveTrainingView()}catch{}
+  setNav('training');document.querySelector('.shell').dataset.screen='import';
+  app.innerHTML='<section class="tm-screen"><header class="tm-header"><div class="eyebrow">导入</div><h1>别人的计划，先看适不适合你</h1><p>粘一个 B站 / YouTube 链接，或直接把计划文字贴进来。</p></header><div class="tm-stack"><textarea id="import-input" class="prompt" rows="5" maxlength="8000" style="width:100%" aria-label="链接或计划文字" placeholder="例如：深蹲 4组×12次，保加利亚分腿蹲 3组×10次，臀桥 3组×20次"></textarea><p class="home-suggestion">抖音反爬，粘贴文案更快；B站/YouTube 可以直接给链接。</p><div id="import-result"></div></div><div class="tm-footer"><button id="import-go">开始分析</button><button id="import-back" class="secondary">返回首页</button></div></section>';
+  document.querySelector('#import-back').onclick=()=>home();
+  document.querySelector('#import-go').onclick=async()=>{
+    const input=document.querySelector('#import-input'),out=document.querySelector('#import-result'),btn=document.querySelector('#import-go');
+    const text=input.value.trim();
+    if(!text){out.innerHTML='<div class="error">先粘点东西进来。</div>';return}
+    btn.disabled=true;btn.textContent='正在读…';out.innerHTML='<p class="home-suggestion">正在读链接/文字并对照你的能力…</p>';
+    try{
+      const d=await api('/api/import/analyze',{input:text,userId});
+      const badge=v=>({ok:'可以照原样',adjust:'需要调整',unsuitable:'不适合你',unmatched:'库里没有'}[v]||v);
+      out.innerHTML=(d.note?'<div class="tm-note"><p>'+esc(d.note)+'</p></div>':'')
+        +'<div class="tm-note lavender"><strong>'+esc(d.title||'识别出的计划')+'</strong><p>'+d.items.length+' 个动作 · 可以照原样 '+d.summary.ok+' · 需调整 '+d.summary.adjust+' · 不适合 '+d.summary.unsuitable+' · 库里没有 '+d.summary.unmatched+'</p></div>'
+        +d.items.map(i=>'<article class="tm-row"><div><strong>'+esc(i.name)+'</strong><small>原文：'+esc(i.doseText||'没写剂量')+'</small><small>判定：'+badge(i.verdict)+(i.matchedName&&i.matchedName!==i.name?' · 对应我们的「'+esc(i.matchedName)+'」':'')+'</small>'+(i.reasons&&i.reasons.length?'<small>'+i.reasons.map(esc).join('；')+'</small>':'')+((i.suggested&&(i.suggested.sets||i.suggested.reps))?'<small>我们的建议：'+(i.suggested.sets?i.suggested.sets+' 组 ':'')+(i.suggested.reps||'')+'</small>':'')+'</div></article>').join('');
+      btn.disabled=false;btn.textContent='再分析一次';
+    }catch(e){out.innerHTML='<div class="error">'+esc(e.message)+'</div>';btn.disabled=false;btn.textContent='开始分析'}
+  };
+}
 async function recordsPage(){
   leaveTrainingView();setNav('records');document.querySelector('.shell').dataset.screen='records';
   app.innerHTML='<section class="records-screen">'+designHeader('记录','训练记录','每一次努力，都值得被看见。')+'<p class="home-suggestion">正在读取训练记录…</p></section>';
@@ -876,6 +898,14 @@ function home(intent=false){
   input.oninput=updateInput;
   const showIntent=()=>{dashboard.hidden=true;document.querySelector('#intent-panel').hidden=false;document.querySelector('.shell').dataset.view='intent';document.querySelector('#intent-actions').hidden=false;document.querySelector('#home-mic').hidden=false;if(!input.value)input.value='30分钟，我在家，徒手自重，想练全身，精力充沛';updateInput();app.scrollTop=0};
   document.querySelector('#generate-plan').onclick=showIntent;document.querySelector('#submit-plan').onclick=()=>document.querySelector('#create').requestSubmit();
+  // D27:入口放在"训练条件"面板里（情境化入口，不与主 CTA 并列抢位置）
+  {
+    const actions=document.querySelector('#intent-actions');
+    if(actions&&!actions.querySelector('#import-entry')){
+      const b=document.createElement('button');b.id='import-entry';b.type='button';b.className='secondary';b.textContent='导入别人的计划';
+      b.onclick=importPage;actions.appendChild(b);
+    }
+  }
   for(const [id,step] of [['duration-minus',-5],['duration-plus',5]])document.querySelector('#'+id).onclick=()=>{const minutes=Math.max(5,Math.min(120,Number(input.value.match(/(\d+)\s*分钟/)?.[1]??30)+step));input.value=/\d+\s*分钟/.test(input.value)?input.value.replace(/\d+\s*分钟/,minutes+'分钟'):minutes+'分钟，'+input.value;updateInput()};
   if(intent===true)showIntent();else applyHomeCta();
 // 多邻国原则(2026-11-09 逆向笔记 §一):一屏只有一个主 CTA —— 有课程就"继续下一场",
