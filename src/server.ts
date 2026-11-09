@@ -677,6 +677,10 @@ const server = createServer(async (req, res) => {
         programs: one("SELECT data_json FROM programs WHERE user_id = ?"),
         contexts: one("SELECT data_json FROM session_contexts WHERE user_id = ?"),
         experimentRecords: one("SELECT data_json FROM experiment_records WHERE user_id = ?"),
+        // Nit-2:语音反馈原文与交互事件也属于用户资产，导出必须包含（删除路径同样覆盖它们）
+        // 注意：set_feedbacks 没有 data_json 列（这一版是宽表），按实际列取。
+        setFeedbacks: db.prepare("SELECT id, set_record_id, difficulty, fatigue, pain_json, source, transcript, captured_at FROM set_feedbacks WHERE set_record_id IN (SELECT id FROM set_records WHERE exercise_instance_id IN (SELECT id FROM exercise_instances WHERE session_id IN (SELECT id FROM workout_sessions WHERE user_id = ?)))").all(userId),
+        interactionEvents: db.prepare("SELECT id, session_id, seq, occurred_at, actor, modality, action, intent, success, transcript, error_json FROM interaction_events WHERE session_id IN (SELECT id FROM workout_sessions WHERE user_id = ?)").all(userId),
       };
       res.writeHead(200, { "content-type": "application/json; charset=utf-8", "content-disposition": `attachment; filename="trainmind-${userId}-${new Date().toISOString().slice(0, 10)}.json"`, "cache-control": "no-store" });
       return res.end(JSON.stringify(bundle, null, 2));
@@ -688,8 +692,10 @@ const server = createServer(async (req, res) => {
       try {
         const ids = (db.prepare("SELECT id FROM workout_sessions WHERE user_id = ?").all(userId) as Array<{ id: string }>).map(r => r.id);
         for (const id of ids) {
-          db.prepare("DELETE FROM set_feedbacks WHERE set_record_id IN (SELECT id FROM set_records WHERE json_extract(data_json, '$.sessionId') = ?)").run(id);
-          db.prepare("DELETE FROM set_records WHERE json_extract(data_json, '$.sessionId') = ?").run(id);
+          // v2 组行的 data_json 是 '{}'，按 json_extract 匹配永远不命中 → 之前"删除成功但残留"。
+          // 改成走 exercise_instances 的 id 集合（v2 行有 exercise_instance_id），legacy 行仍按 json 匹配。
+          db.prepare("DELETE FROM set_feedbacks WHERE set_record_id IN (SELECT id FROM set_records WHERE exercise_instance_id IN (SELECT id FROM exercise_instances WHERE session_id = ?) OR json_extract(data_json, '$.sessionId') = ?)").run(id, id);
+          db.prepare("DELETE FROM set_records WHERE exercise_instance_id IN (SELECT id FROM exercise_instances WHERE session_id = ?) OR json_extract(data_json, '$.sessionId') = ?").run(id, id);
           db.prepare("DELETE FROM interaction_events WHERE session_id = ?").run(id);
           db.prepare("DELETE FROM adaptation_events WHERE session_id = ?").run(id);
           db.prepare("DELETE FROM observer_records WHERE session_id = ?").run(id);
@@ -887,7 +893,9 @@ const server = createServer(async (req, res) => {
       // 未配置时仍走原报错路径（否则会吞掉"请先配置模型"）。
       if (!session && chatStatus().configured) {
         const mood = classifyMood(input.message);
-        if (mood !== "neutral") {
+        // Nit-1:如果同时问了"练什么/怎么练/几组"，不能只回安慰把问题吞掉。
+        const actionable = /练什么|怎么练|几组|几次|多少|计划|排一|怎么安排|多重|多久/.test(input.message);
+        if (mood !== "neutral" && !actionable) {
           const comfort = buildCheckIn({ daysSinceLast: null, streakWeeks: 0, totalSessions: 0, lastMessage: input.message });
           return json(res, 200, { reply: comfort.text, mode: "comfort", mood, status: null });
         }
