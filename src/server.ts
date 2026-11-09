@@ -857,7 +857,8 @@ const server = createServer(async (req, res) => {
       // A10/D24(2026-11-09):真实用户练出来的场次必须记 human —— 缺省值以前是 demo,
       // 导致首页"生成计划"的每一场真练都被打上演示数据,实验看板里一条 human 都没有。
       // demo / automated_test 只在调用方显式指定时使用(演示包与自动化测试)。
-      const { input, userId = "demo-user", knownEnvironment, experienceMode = "minimal", topic = "history", talkativeness = "medium", randomAssignment = false, dataOrigin = "human" } = await body(req);
+      // 注意:这里的 input 是用户那句话(字符串)。加练标记是另一个字段 kind,必须单独解构。
+      const { input, userId = "demo-user", knownEnvironment, experienceMode = "minimal", topic = "history", talkativeness = "medium", randomAssignment = false, dataOrigin = "human", kind } = await body(req);
       requestUserId = userId;
       if (typeof input !== "string" || !input.trim()) return json(res, 400, { error: "请输入本次训练需求。" });
       if (!["human", "automated_test", "demo"].includes(dataOrigin)) return json(res, 400, { error: "无效的 dataOrigin。" });
@@ -870,7 +871,13 @@ const server = createServer(async (req, res) => {
       if (result.interpretation.status === "needs_clarification") return json(res, 409, result);
       db.prepare("INSERT INTO user_training_model_snapshots (user_id, generated_at, data_json) VALUES (?, ?, ?)").run(userId, result.trainingModel!.generatedAt, JSON.stringify(result.trainingModel));
       db.prepare("INSERT INTO session_contexts (user_id, data_json, created_at) VALUES (?, ?, ?)").run(userId, JSON.stringify(result.context), new Date().toISOString());
+      // 加练(owner 2026-11-09):用户完成当日计划后自愿再练的一场。不拦、不降级,
+      // 只是打上标记单独存档 —— 这样记录里能分清"计划内"和"自己加的",
+      // 课程进度只认计划那场,不会被加练顶掉。
+      // 注意:响应体返回的是 result(不是下面持久化的 workout),两处都要标。
+      if (kind === "extra") { result.workout!.kind = "extra"; }
       const workout = prepareWorkout(result.workout!);
+      if (kind === "extra") workout.kind = "extra";
       workout.suggestedExercises = workout.exercises.map(x => ({ ...x }));
       const assignedMode: ExperienceMode = randomAssignment ? (["minimal", "content", "companion"] as ExperienceMode[])[Math.floor(Math.random() * 3)] : experienceMode;
       configureExperience(workout, { mode: assignedMode, topic: topic as ExperienceTopic, talkativeness, experimentGroup: assignedMode, dataOrigin: dataOrigin as DataOrigin });
