@@ -5,7 +5,7 @@
 // 现场翻记录会翻出 smoke-xxx / planprobe 这类脏数据。所以单独造一个 user：
 //   - 3 周连续训练（每周 2 场），实测次数 8 → 10 → 12（counted，能拿来讲"我现在真能多做 4 个"）
 //   - 一个 4 周课程，已练 6/12 场（讲"第 3 周 · 加深 · 已完成 6/12"）
-//   - 全部标记 dataOrigin=human、status=completed（不是演示数据，也不是中断）
+//   - dataOrigin 缺省 `demo`；要拿去演示实验看板时显式 TRAINMIND_DEMO_AS_HUMAN=1（见下）
 //
 // 用法（建议先停服务）：
 //   node tools/demo-seed.ts               # dry-run，只报告
@@ -17,6 +17,12 @@ import { fileURLToPath } from "node:url";
 import { completeRest, completeWarmup, createExperimentRecord, generateWorkout, markSetComplete, startWorkout, submitSetFeedback, type SessionContext, type WorkoutSession } from "../src/core.ts";
 import { buildProgram, recordCompletion, type Program } from "../src/program.ts";
 
+// 2026-11-09 复核 Medium-2：此前这里写死 "human"，违反 D24 自己的原则 ——
+// 演示用的 6 场是**合成**数据，却混进 `/api/experiment?dataOrigin=human`（18 条里 6 条是假的），
+// 此后任何按 human 口径做的分析都掺了 1/3 假数据。
+// 现在缺省标 demo（诚实）；演示当场要看到板有内容时，由 tools/demo-ready.sh 传
+// TRAINMIND_DEMO_AS_HUMAN=1 显式升格 —— 有意为之的开关，而不是藏起来的硬编码。
+const seededOrigin = () => (process.env.TRAINMIND_DEMO_AS_HUMAN === "1" ? "human" : "demo") as "human" | "demo";
 const dbPath = process.env.TRAINMIND_DB ?? fileURLToPath(new URL("../trainmind.db", import.meta.url));
 const apply = process.env.TRAINMIND_APPLY === "1";
 const userId = process.env.TRAINMIND_DEMO_USER ?? "demo-investor";
@@ -59,7 +65,7 @@ for (const plan of PLAN) {
     session.userId = userId;
     // 演示只留第一个动作(3 组),保证结组后能干净收尾(status=completed)
     session.exercises = [{ ...session.exercises[0]!, sets: 3, completedSets: 0, targetReps: "8-12", executionStatus: "active" }];
-    session.experience = { ...(session.experience ?? { mode: "minimal", initialMode: "minimal", experimentGroup: "minimal", topic: "history", talkativeness: "medium", enabled: false, queue: [], currentIndex: 0, currentOffsetSeconds: 0, playback: "idle", contentSkipCount: 0, contentDisabled: false, events: [] }), dataOrigin: "human" } as never;
+    session.experience = { ...(session.experience ?? { mode: "minimal", initialMode: "minimal", experimentGroup: "minimal", topic: "history", talkativeness: "medium", enabled: false, queue: [], currentIndex: 0, currentOffsetSeconds: 0, playback: "idle", contentSkipCount: 0, contentDisabled: false, events: [] }), dataOrigin: seededOrigin() } as never;
 
     startWorkout(session, iso(startMs));
     if (session.status === "warming_up") completeWarmup(session, iso(startMs + 120_000));
@@ -119,10 +125,17 @@ try {
   db.exec("BEGIN IMMEDIATE");
   const oldSessions = (db.prepare("SELECT id FROM workout_sessions WHERE user_id = ?").all(userId) as Array<{ id: string }>).map(r => r.id);
   for (const id of oldSessions) {
+    // 2026-11-09 复核发现的真缺陷:这里原来只删组记录和事件,没删 workout_exercises /
+    // exercise_instances。只要库里多出一场"经 API 建出来的会话"(带子表),整事务就撞
+    // FOREIGN KEY constraint failed 回滚 —— 而脚本对外宣称是"可重复重造"。
+    // 顺序:先把引用 set_records 的反馈删掉,再删组记录,最后删会话的子表。
+    db.prepare("DELETE FROM set_feedbacks WHERE set_record_id IN (SELECT id FROM set_records WHERE json_extract(data_json, '$.sessionId') = ?)").run(id);
     db.prepare("DELETE FROM set_records WHERE json_extract(data_json, '$.sessionId') = ?").run(id);
     db.prepare("DELETE FROM interaction_events WHERE session_id = ?").run(id);
     db.prepare("DELETE FROM adaptation_events WHERE session_id = ?").run(id);
-    db.prepare("DELETE FROM set_feedbacks WHERE exists (select 1 from set_records where id = set_feedbacks.set_record_id)").run();
+    db.prepare("DELETE FROM observer_records WHERE session_id = ?").run(id);
+    db.prepare("DELETE FROM workout_exercises WHERE session_id = ?").run(id);
+    db.prepare("DELETE FROM exercise_instances WHERE session_id = ?").run(id);
   }
   db.prepare("DELETE FROM workout_sessions WHERE user_id = ?").run(userId);
   db.prepare("DELETE FROM training_records WHERE user_id = ?").run(userId);
@@ -150,7 +163,7 @@ try {
       }),
     );
     db.prepare("INSERT OR REPLACE INTO experiment_records (session_id, user_id, experience_mode, data_json, created_at) VALUES (?, ?, ?, ?, ?)").run(
-      s.sessionId, userId, "minimal", JSON.stringify({ ...item.record, dataOrigin: "human" }), s.runtime.completedAt!,
+      s.sessionId, userId, "minimal", JSON.stringify({ ...item.record, dataOrigin: seededOrigin() }), s.runtime.completedAt!,
     );
   }
   db.prepare("INSERT INTO programs (id, user_id, status, data_json, created_at) VALUES (?, ?, ?, ?, ?)").run(

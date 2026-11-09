@@ -17,7 +17,9 @@ ok()   { printf '  ✓ %s\n' "$1"; }
 bad()  { printf '  ✗ %s\n' "$1"; fail=1; }
 
 echo "① 生成演示数据（demo 用户：$USER_ID）"
-TRAINMIND_DEMO_USER="$USER_ID" TRAINMIND_APPLY=1 node tools/demo-seed.ts 2>&1 | grep -E "训练场次|课程|备份|已写入" | sed 's/^/  /'
+# 演示当场要看到板有内容 → 显式把种子场次升格成 human；演示结束后去掉这个开关重造，
+# 或按 TRAINMIND_RELABEL_USERS 复标，别让合成数据长期混在真人口径里（2026-11-09 复核 Medium-2）。
+TRAINMIND_DEMO_USER="$USER_ID" TRAINMIND_DEMO_AS_HUMAN="${TRAINMIND_DEMO_AS_HUMAN:-1}" TRAINMIND_APPLY=1 node tools/demo-seed.ts 2>&1 | grep -E "训练场次|课程|备份|已写入" | sed 's/^/  /'
 
 echo "② 自检"
 if curl -sf -o /dev/null "$BASE/"; then ok "服务在跑（$BASE）"; else bad "服务没在跑 —— 先在另一个终端执行 ./start-7b3.sh"; fi
@@ -65,3 +67,6 @@ if [ "$fail" = "1" ]; then
 fi
 echo
 echo "演示就绪。讲稿见 docs/DEMO-SCRIPT.md（8–10 分钟）。"
+echo
+echo "提醒：演示种子场次按 human 口径写入实验看板（TRAINMIND_DEMO_AS_HUMAN=${TRAINMIND_DEMO_AS_HUMAN:-1}）。"
+echo "      演示结束后请归回 demo，否则按 human 做的分析会掺 6 条合成数据。"

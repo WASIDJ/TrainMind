@@ -391,6 +391,50 @@ test("server: 休息中报疼会把刚完成的组标成 pain,且不改剂量", 
   } finally { child.kill(); await new Promise(resolve => child.once("exit", resolve)); await rm(dbPath, { force: true }); }
 });
 
+// ── B6 语音路径补齐(2026-11-09 复核 High-1)───────────────────────────
+// 「头晕/恶心/胸闷/心慌/发麻」这些红旗词不在前端 pain 正则里,会被当成 coach_message
+// 送到 stopIntent=pain 分支。旧实现只停机器、不标组 —— 安全证据链对这类话仍断。
+test("server: 语音红旗词报疼(恶心)也要把刚完成的组标成 pain,且不改剂量", async () => {
+  const dbPath = `${process.cwd()}${process.platform === "win32" ? "\\" : "/"}test${process.platform === "win32" ? "\\" : "/"}voicepain-${process.pid}.db`;
+  const port = 44000 + (process.pid % 900) + (++__portSeq * 7);
+  await rm(dbPath, { force: true });
+  const child = spawn(process.execPath, ["src/server.ts"], { cwd: process.cwd(), env: { ...process.env, PORT: String(port), TRAINMIND_DB: dbPath }, stdio: ["ignore", "pipe", "pipe"] });
+  try {
+    await new Promise<void>((resolve, reject) => { const timeout = setTimeout(() => reject(Error("server timeout")), 20000); child.stdout.on("data", b => { if (String(b).includes("TrainMind running")) { clearTimeout(timeout); resolve(); } }); child.once("exit", code => reject(Error(`server exited ${code}`))); });
+    const origin = `http://localhost:${port}`;
+    const get = async (path: string) => (await fetch(origin + path)).json() as Promise<any>;
+    const post = async (path: string, payload: unknown) => { const r = await fetch(origin + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }); return { status: r.status, body: await r.json().catch(() => ({})) }; };
+    const bind = async (id: string, payload: any) => { const { workout: w } = await get(`/api/workouts/${id}`); return { ...payload, context: { sessionId: w.sessionId, exerciseId: w.exercises[w.runtime.currentExerciseIndex]?.exerciseId ?? null, setNumber: w.runtime.currentSetNumber, coachPhase: w.runtime.coach?.phase ?? null, status: w.status, eventCount: w.runtime.events.length } }; };
+
+    const userId = "voicepain-e2e";
+    const created = await post("/api/workouts/preview", { input: "我在家，有20分钟，想练全身。", userId, dataOrigin: "automated_test" });
+    const id = created.body.workout.sessionId;
+    await post(`/api/workouts/${id}/actions`, await bind(id, { type: "start", coach: true }));
+    await post(`/api/workouts/${id}/actions`, await bind(id, { type: "coach_event", event: { type: "start_set" } }));
+    await post(`/api/workouts/${id}/actions`, await bind(id, { type: "coach_event", event: { type: "guidance_started" } }));
+    const before = (await get(`/api/workouts/${id}`)).workout;
+    const weightBefore = before.exercises[before.runtime.currentExerciseIndex].currentWeight;
+    const done = await post(`/api/workouts/${id}/actions`, await bind(id, { type: "complete_set" }));
+    assert.equal(done.body.workout.status, "resting");
+
+    // 红旗词走 coach_message,不是 feedback 动作
+    const pain = await post(`/api/workouts/${id}/actions`, await bind(id, { type: "coach_message", message: "刚才那组做完有点恶心" }));
+    assert.equal(pain.status, 200, JSON.stringify(pain.body).slice(0, 200));
+    assert.equal(pain.body.workout.status, "paused", "说完必须停下");
+    assert.ok(pain.body.workout.runtime.coach?.safetyStopped, "必须置 safetyStopped");
+
+    const db = new DatabaseSync(dbPath);
+    try {
+      const rows = db.prepare("SELECT data_json FROM set_records WHERE data_json != '{}'").all() as Array<{ data_json: string }>;
+      assert.equal(rows.length, 1, "更正而不是新增");
+      const record = JSON.parse(rows[0]!.data_json);
+      assert.equal(record.feedback, "pain", "语音报疼同样必须标在那组上");
+      assert.equal(record.pain, true, "pain 标志必须置位(能力模型据此躲开同一动作)");
+      assert.equal(record.actualWeight, weightBefore, "报疼不许改剂量");
+    } finally { db.close(); }
+  } finally { child.kill(); await new Promise(resolve => child.once("exit", resolve)); await rm(dbPath, { force: true }); }
+});
+
 // ── B4(2026-11-09):三态只降不升的修复 ─────────────────────────
 // 旧实现组后补报次数时沿用 record.actualRepsSource(自动结组时是 assumed),
 // 用户真报的数字被永久当成推定,进步统计永远排除它。

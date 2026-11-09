@@ -916,6 +916,14 @@ const server = createServer(async (req, res) => {
           // 注意排除"换动作/器械被占"这类 substitute 意图(它由后面的 parseCoachReport 处理),
           // classifyStopIntent 的 hard_stop 词表里含"换动作",不能一刀切。
           if (stopIntent === "pain" && session.runtime.coach) {
+            // B6 补齐(2026-11-09 复核 High-1):语音/旗标语路径此前**只停机器不记组** ——
+            // 「头晕/恶心/胸闷/心慌/发麻」这些 classifyStopIntent 红旗词不在前端 pain 正则里,
+            // 会走到这里;若不标组,能力模型 recentPainEvent 恒 false,下次照样排同一个动作。
+            // 与按钮路径完全镜像:先记在刚完成的那一组上,再走安全通道;剂量不动。
+            if (session.status === "resting") {
+              const marked = applyLateSetFeedback(session, { feedback: "pain" });
+              if (marked) { setRecord = marked.record; alreadyPersisted = true; }
+            }
             ({ directive } = handleCoachEvent(session, { type: "pain" }, undefined, input.message));
             break;
           }
