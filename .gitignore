@@ -24,3 +24,8 @@ test/chrome-e2e-profile/
 # Python 字节码(测试会 import tools/stt-sidecar.py,生成 __pycache__)
 __pycache__/
 *.pyc
+
+# 外部数据集 clone(不是子模块:上游 RepDB/exercise-dataset,3.1M 原始数据)。
+# 代码只读 knowledge/exercises.repdb.json;需要原始数据时手动:
+#   git clone https://github.com/RepDB/exercise-dataset.git test/repdb-source
+/test/repdb-source/
