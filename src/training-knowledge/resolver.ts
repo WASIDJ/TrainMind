@@ -72,7 +72,9 @@ export function resolveRequiredStimulus(input: StimulusInput): RequiredStimulus 
     accessoryPatterns: input.durationMinutes >= 30 ? accessoryPatterns : [], setsPerExercise,
     repRange: `${profile.reps.minimum}-${profile.reps.maximum}`, restSeconds: Math.round((profile.restSeconds.minimum + profile.restSeconds.maximum) / 2),
     targetRir: Math.round((profile.targetRir.minimum + profile.targetRir.maximum) / 2), weeklySetsRemainingByPattern, workingSetCap, exerciseCountRange,
-    ruleIds: [...new Set([profile.sets.ruleId, profile.reps.ruleId, profile.restSeconds.ruleId, profile.targetRir.ruleId, profile.durationPolicyRuleId, ...(profile.weeklySetsTarget ? [profile.weeklySetsTarget.ruleId] : [])])], decisionReasons: reasons
+    // 注意：不再把 weeklySetsTarget.ruleId 放进 ruleIds —— 该规则已冻结（只算不用），
+    // 处方里声称应用了没应用的规则属于虚假可解释性（2026-11-10 清理）。
+    ruleIds: [...new Set([profile.sets.ruleId, profile.reps.ruleId, profile.restSeconds.ruleId, profile.targetRir.ruleId, profile.durationPolicyRuleId])], decisionReasons: reasons
   };
 }
 

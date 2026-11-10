@@ -51,7 +51,10 @@ test("goal and experience resolve to distinct, provenance-linked stimuli", () =>
   assert.equal(beginner.setsPerExercise, 1); assert.equal(intermediate.setsPerExercise, 2);
   assert.equal(strength.goal, "strength"); assert.notEqual(strength.repRange, hypertrophy.repRange);
   assert.notEqual(endurance.restSeconds, strength.restSeconds);
-  assert.ok(hypertrophy.ruleIds.includes("acsm-hypertrophy-weekly-volume-2026"));
+  // 2026-11-10：周容量目标已冻结（只算不用），所以**不能**再声称应用了它。
+  // 这条断言方向被翻转过一次：原来断言"包含"，现在断言"不包含"——因为规则本身改了，不是改断言迁就代码。
+  assert.ok(!hypertrophy.ruleIds.includes("acsm-hypertrophy-weekly-volume-2026"), "冻结的规则不该出现在已应用的规则列表里");
+  assert.ok(hypertrophy.weeklySetsRemainingByPattern && Object.keys(hypertrophy.weeklySetsRemainingByPattern).length, "字段仍要算出来（只是不应用）");
 });
 
 test("reported lower-body training yesterday and fatigue alter required stimulus", () => {
@@ -165,4 +168,8 @@ test("周容量目标保持冻结：只计算、不参与排课", async () => {
   const stimulus = result.workout!.requiredStimulus!;
   assert.ok(stimulus.weeklySetsRemainingByPattern, "字段仍要算出来");
   assert.ok(Object.values(stimulus.weeklySetsRemainingByPattern).every(v => v >= 0), "剩余量不该出现负数");
+
+  // 行为级护栏（比源码扫描更硬）：肌肥大处方的 ruleIds 里不许出现这条冻结规则
+  const workout = await createWorkout("我在Test Gym，有45分钟，中级，想增肌。", "knowledge-frozen-ruleid", new RuleLanguageModelProvider());
+  assert.ok(!workout.workout!.prescription.ruleIds.includes("acsm-hypertrophy-weekly-volume-2026"), "处方不能声称应用了冻结的周容量规则");
 });
