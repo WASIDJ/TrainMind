@@ -133,13 +133,13 @@ export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] 
       text = `${meta.label}：${Math.floor(days)} 天没练了`;
     } else if (hours >= window) {
       state = "recovered";
-      text = `${meta.label}：已恢复 100%（${Math.round(hours)} 小时前练过）`;
+      text = `${meta.label}：可以练了（${Math.floor(days) || 1} 天前练过）`;
     } else if (hours >= window / 2) {
       state = "recovering";
-      text = `${meta.label}：恢复中 ${recoveryPercent}%，还需约 ${Math.max(1, Math.round(window - hours))} 小时`;
+      text = `${meta.label}：还在恢复 · 建议明天`;
     } else {
       state = "just_trained";
-      text = `${meta.label}：刚练过 ${recoveryPercent}%（${Math.max(1, Math.round(hours))} 小时前）`;
+      text = `${meta.label}：今天刚练过 · 建议明天`;
     }
     return {
       group: meta.key, label: meta.label, sets7d: row.sets7d, sets28d: row.sets28d,

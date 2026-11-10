@@ -820,7 +820,7 @@ async function renderMuscleLedger(screen){
     const box=document.createElement('section');box.className='tm-note';box.id='muscle-ledger';
     box.innerHTML='<strong>肌群状态</strong>'+rows
       +(neg.length?'<p class="home-suggestion" style="margin-top:6px">被落下：'+esc(neg.join('、'))+'（两周以上没练）</p>':'')
-      +'<p class="home-suggestion" style="margin-top:6px">只按你真实完成的组算。红=刚练完，橙=恢复中，绿=已恢复，紫=太久没练，灰=没记录。</p>';
+      +'<p class="home-suggestion" style="margin-top:6px">只按你真实完成的组算（按训练量估算，不是身体测量）。红=今天刚练，橙=还在恢复，绿=可以练，紫=太久没练，灰=没记录。</p>';
     screen.appendChild(box);
   }catch{}
 }

@@ -34,7 +34,8 @@ test("肌群：刚练过的部位标 just_trained，剂量不动", () => {
   assert.equal(legs.state, "just_trained");
   assert.equal(legs.sets7d, 2);
   assert.equal(legs.measuredSets7d, 2);
-  assert.match(legs.text, /刚练过/);
+  assert.match(legs.text, /今天刚练过/);
+  assert.doesNotMatch(legs.text, /%|小时/, "展示层不出现百分比与小时数");
 });
 
 test("肌群：超过恢复窗口就算已恢复", () => {
