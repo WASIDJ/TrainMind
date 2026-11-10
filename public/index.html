@@ -815,7 +815,8 @@ async function renderMuscleLedger(screen){
     const d=await api('/api/muscles?userId='+encodeURIComponent(userId));
     if(!screen.isConnected||!Array.isArray(d.muscles))return;
     const tone={just_trained:'#ffb4a2',recovering:'#ffd9c9',recovered:'#b7dfb7',neglected:'#c9b8e8',no_record:'rgba(0,0,0,.12)'};
-    const rows=d.muscles.map(m=>'<div style="display:flex;align-items:center;gap:8px;padding:5px 0"><span style="width:10px;height:10px;border-radius:50%;flex:0 0 auto;background:'+(tone[m.state]||'#ddd')+'"></span><span style="width:44px">'+esc(m.label)+'</span><small style="flex:1;opacity:.72">'+esc(m.text)+'</small><small style="opacity:.5">近7天 '+m.sets7d+' 组</small></div>').join('');
+    // 主口径是每周次数（同一肌群 2–3 次）；按小时的恢复度只作辅助提示，放第二行弱化显示
+    const rows=d.muscles.map(m=>'<div style="padding:5px 0"><div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;flex:0 0 auto;background:'+(tone[m.state]||'#ddd')+'"></span><span style="width:44px">'+esc(m.label)+'</span><small style="flex:1;opacity:.78">'+esc(m.frequencyText||m.text)+'</small></div><div style="margin-left:18px;opacity:.5;font-size:12px">'+esc(m.text)+' · 近7天 '+m.sets7d+' 组</div></div>').join('');
     const neg=((d.signals&&d.signals.neglected)||[]).map(g=>(d.muscles.find(x=>x.group===g)||{}).label||g);
     const box=document.createElement('section');box.className='tm-note';box.id='muscle-ledger';
     box.innerHTML='<strong>肌群状态</strong>'+rows

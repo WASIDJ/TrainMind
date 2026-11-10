@@ -13,7 +13,7 @@
 
 | 项 | 数值 |
 |---|---|
-| 全量测试 | **351 项 / 350 过 / 1 skip / 0 败**（2026-11-10 社区首批实现后 `npm test` 全目录连续两次一致） |
+| 全量测试 | **361 项 / 360 过 / 1 skip / 0 败**（2026-11-10 恢复约束主口径改周频次后 `npm test` 全目录连续两次一致） |
 | 说明 | 早期用"手工列文件"的清单跑测试，漏掉 `test/telemetry/e2e-wiring.test.ts` 等文件，得出的"0 败"是假绿。2026-11-06 起改为跑整个目录，**报数一律报全量** |
 | 真机证据 | `device-acceptance/20261105-094515/`（42 个截图 + UI 树） |
 | 本次复核（2026-11-09） | 审计 46 条 + 裁决 D22/D23/D24 + D26 编排 + 复核 High-1 + D27 导入 + D28 加练后 `npm test` 实跑 **325 项 / 324 过 / 1 skip / 0 败，连跑两次一致** |
@@ -300,3 +300,27 @@
 这是完整方案的首批切片：旧训练 ID 未安全绑定到社区，恢复记录不冒充训练完成；无私信、火花、固定圈、附近约练或真实优惠；本地试用未对外部署。完整方案与实施范围已区分。
 
 验证：新增社区专项 8 项；最终全量两次均 **351/350/1/0**。Chrome 实走发布/关注/评论/计划摘要/刷新/删除与四种尺寸；不改训练历史，安全与审核处理专项通过。截图与 QA 见 [验收](ui-review/community/README.md)。预览 3202、临时库 `/tmp/trainmind-community-v1-review.db`，三个演示账号均标注，未写真人库；未连接真机。
+
+## 二十二、恢复约束主口径改为每周频次（2026-11-10，D34）
+
+**问题**：上一轮把"用户报酸痛"接进了排课（7ed6444），但**恢复约束本身仍是按小时**（腿 72h / 臀背胸 48h / 肩臂 36h，`src/muscles.ts` 的 `recoveryHours`）。证据清单里这组小时数是"按常识拍的"（EVIDENCE-RECOVERY 第 4 条，强度低），而真正有 meta 支撑的第 2 条（每周 2–3 次）反而没用上。
+
+**现状（改之前先把链路写清楚）**：
+
+| 环节 | 位置 | 改了没有 |
+|---|---|---|
+| 训练刺激（要练哪些模式、每组几组、总组数上限） | `resolveRequiredStimulus`（`src/training-knowledge/resolver.ts`） | 没改。它已有一条按**组数**的近似规则（某模式近 7 天 ≥10 组就移出必练），`weeklySetsRemainingByPattern` 算出来但 `core.ts` 从不读 |
+| 处方模板（块时长占比） | `sessionRecipe`（`recipes.json` / 回退 `knowledgeRecipe`） | 没改，只选块模板，不决定组数 |
+| 容量分配（选动作 + 组数 + 时长） | `generateWorkout`（`src/core.ts`）：候选过滤 → rank → main/accessory → 超时回弹 | **改这里**：加一条按肌群周频次的过滤 |
+| 恢复约束 | `context.soreness` 过滤（用户自报） | 保留，优先级不变（用户自报 > 任何估算） |
+
+**改动**：
+
+- `src/muscles.ts`：账本新增 `sessions7d`（按**会话**去重，不是组数）、`frequencyStatus`（none/below/in_range/above）、`frequencyText`；`WEEKLY_FREQUENCY_TARGET = { min:2, max:3 }`（Schoenfeld 2016 频率 meta）。`recoveryHours/recoveryPercent/state` 保留但降级为展示层提示。
+- `src/core.ts`：`generateWorkout` 里用账本算出本周到上限（≥4 次）的部位，这一天不再给这些部位加容量；候选不足 3 个不过滤；写入 `decisionReason`（ruleId `muscle-weekly-frequency-v1`）并进 `prescription.ruleIds`。
+- 低强度收尾（快走/活动度）只对"本周到上限"挡，不对酸痛挡——酸痛时低强度活动有益，酸痛只挡该部位的力量动作。
+- `public/index.html`：记录页肌群列表主行改为周频次，按小时的恢复度降为第二行弱化显示。
+
+**验证**：新增 `test/recovery-frequency.test.ts` 7 项（2 项对照组不变量 + 2 项账本 + 3 项排课）。第一版把低强度收尾也对酸痛挡住，打红了昨天那条"腿酸仍要能排出计划（≥3 个）"——**没有改断言**，改回"只对到上限挡"。全量 `npm test` 两次 361/360/1/0。
+
+**未做**：体图配色；把 `weeklySetsRemainingByPattern`（按组数的周容量）真正接进分配——按组数和按次数是两件事，先只上频次。

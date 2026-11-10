@@ -1,5 +1,12 @@
 // 肌群疲劳账本（2026-11-09）：按肌群聚合真实完成的组，推断恢复状态。
 //
+// 主口径（2026-11-10 起）：**每周训练频次**——同一肌群每周 2–3 次是主规则。
+//   依据：Schoenfeld BJ, Ogborn D, Krieger JW. Effects of Resistance Training Frequency on
+//   Measures of Muscle Hypertrophy: A Systematic Review and Meta-Analysis. Sports Med. 2016.
+//   DOI 10.1007/s40279-016-0543-8（见 docs/EVIDENCE-RECOVERY.md 第 2 条，强度：较高，系统综述+meta）。
+//   小时数（recoveryHours / recoveryPercent / state）降为**辅助提示**：只用于展示层措辞，
+//   不再决定"今天能不能练这个部位"。
+//
 // 为什么需要它：此前 `RecoveryState` 只有"整场自述"（fresh/fatigued），没有任何按肌群的累计。
 // 后果是"今天腿有点酸"只能拼一句安全提示文案，排课照样排深蹲——这既是 Fitbod 的招牌，
 // 也是我们自己上一轮复核发现的漏洞（`core.ts` 的过滤链里没有 soreness）。
@@ -9,7 +16,6 @@
 //   2. 只认真实完成的组：`assumed`（按计划推定）也算训练量，但要单独标出来，别和 counted 混谈。
 //   3. 命名空间统一：自研动作用 legs/chest/back 这类粗粒度名，RepDB 用 quadriceps/pectoralis_major
 //      这类解剖名，这里统一映射到 8 个用户看得懂的部位。
-
 export type MuscleGroup = "chest" | "back" | "shoulders" | "arms" | "core" | "glutes" | "legs" | "calves";
 
 export interface MuscleMeta { key: MuscleGroup; label: string; /** 完全恢复所需小时数（大肌群更久） */ recoveryHours: number }
@@ -48,6 +54,16 @@ export function canonicalMuscle(name: string | undefined | null): MuscleGroup | 
 
 export type MuscleState = "just_trained" | "recovering" | "recovered" | "neglected" | "no_record";
 
+/**
+ * 每周训练频次目标：同一肌群每周 2–3 次。
+ * 出处：Schoenfeld 2016 频率 meta（DOI 10.1007/s40279-016-0543-8）。
+ * 注意：meta 比的是"同等周训练量下 2–3 次 vs 1 次"，不能说成"4 次有害"；
+ * 所以超过上限时我们的做法是**这一周不再给这个部位加容量**，不是判它有伤。
+ */
+export const WEEKLY_FREQUENCY_TARGET = { min: 2, max: 3, ruleId: "muscle-weekly-frequency-v1" } as const;
+
+export type FrequencyStatus = "none" | "below" | "in_range" | "above";
+
 export interface MuscleLedgerEntry {
   group: MuscleGroup;
   label: string;
@@ -63,13 +79,20 @@ export interface MuscleLedgerEntry {
   /** 0–100 的恢复度（已过时间 / 恢复窗口）。没有记录为 null —— 不假装 0% */
   recoveryPercent: number | null;
   state: MuscleState;
-  /** 一句可直接给用户看的话 */
+  /** 一句可直接给用户看的话（按小时，辅助提示） */
   text: string;
+  /** 近 7 天**训练次数**（按会话去重，不是组数）——恢复约束的主口径 */
+  sessions7d: number;
+  frequencyStatus: FrequencyStatus;
+  /** 一句可直接给用户看的频次说明（主口径） */
+  frequencyText: string;
 }
 
 export interface LedgerSet {
   exerciseId: string;
   completedAt: string;
+  /** 会话 ID：频次按会话去重；缺省时退化为"按日期去重"（老调用方没有这个字段） */
+  sessionId?: string;
   actualRepsSource?: "counted" | "reported" | "assumed";
   pain?: boolean;
 }
@@ -87,7 +110,7 @@ export const NEGLECT_DAYS = 14;
 
 export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] {
   const now = input.now ?? Date.now();
-  const acc = new Map<MuscleGroup, { sets7d: number; sets28d: number; measured7d: number; assumed7d: number; last: number }>();
+  const acc = new Map<MuscleGroup, { sets7d: number; sets28d: number; measured7d: number; assumed7d: number; last: number; sessions: Set<string> }>();
 
   for (const set of input.sets) {
     const at = Date.parse(set.completedAt);
@@ -100,10 +123,12 @@ export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] 
       if (g) muscles.add(g);
     }
     for (const group of muscles) {
-      const row = acc.get(group) ?? { sets7d: 0, sets28d: 0, measured7d: 0, assumed7d: 0, last: 0 };
+      const row = acc.get(group) ?? { sets7d: 0, sets28d: 0, measured7d: 0, assumed7d: 0, last: 0, sessions: new Set<string>() };
       if (age <= 7 * DAY) {
         row.sets7d += 1;
         if (set.actualRepsSource === "assumed") row.assumed7d += 1; else row.measured7d += 1;
+        // 频次按"会话"去重（同一天练两组不算两次）；老调用方没有 sessionId 时退化为按日期
+        row.sessions.add(set.sessionId ?? `day:${set.completedAt.slice(0, 10)}`);
       }
       if (age <= 28 * DAY) row.sets28d += 1;
       if (at > row.last) row.last = at;
@@ -118,6 +143,7 @@ export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] 
         group: meta.key, label: meta.label, sets7d: 0, sets28d: 0, measuredSets7d: 0, assumedSets7d: 0,
         lastTrainedAt: null, hoursSince: null, recoveryHours: meta.recoveryHours, recoveryPercent: null, state: "no_record" as const,
         text: `${meta.label}：还没有记录`,
+        sessions7d: 0, frequencyStatus: "none" as const, frequencyText: `${meta.label}：本周还没练`,
       };
     }
     const hours = (now - row.last) / 3_600_000;
@@ -141,23 +167,34 @@ export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] 
       state = "just_trained";
       text = `${meta.label}：今天刚练过 · 建议明天`;
     }
+    const sessions7d = row.sessions.size;
+    const frequencyStatus: FrequencyStatus = sessions7d === 0 ? "none" : sessions7d < WEEKLY_FREQUENCY_TARGET.min ? "below" : sessions7d <= WEEKLY_FREQUENCY_TARGET.max ? "in_range" : "above";
+    const frequencyText = frequencyStatus === "none" ? `${meta.label}：本周还没练`
+      : frequencyStatus === "below" ? `${meta.label}：本周 ${sessions7d} 次（建议每周 ${WEEKLY_FREQUENCY_TARGET.min}–${WEEKLY_FREQUENCY_TARGET.max} 次）`
+      : frequencyStatus === "in_range" ? `${meta.label}：本周 ${sessions7d} 次，正好在该练的次数里`
+      : `${meta.label}：本周 ${sessions7d} 次，已超过 ${WEEKLY_FREQUENCY_TARGET.max} 次，本周先不加量`;
     return {
       group: meta.key, label: meta.label, sets7d: row.sets7d, sets28d: row.sets28d,
       measuredSets7d: row.measured7d, assumedSets7d: row.assumed7d,
       lastTrainedAt: new Date(row.last).toISOString(), hoursSince: Math.round(hours),
       recoveryHours: window, recoveryPercent, state, text,
+      sessions7d, frequencyStatus, frequencyText,
     };
   });
 }
 
-/** 可以直接用在排课/提示里的两类信号 */
+/** 可以直接用在排课/提示里的信号 */
 export function ledgerSignals(entries: MuscleLedgerEntry[]) {
   return {
-    /** 还没恢复完的部位（排课时应避开或降量） */
+    /** 还没恢复完的部位（按小时的辅助提示，只用于措辞，不再作为排课主约束） */
     recovering: entries.filter(x => x.state === "just_trained" || x.state === "recovering").map(x => x.group),
     /** 两周以上没练的部位（可以主动提议） */
     neglected: entries.filter(x => x.state === "neglected").map(x => x.group),
     /** 有记录且已恢复，可以正常安排 */
     ready: entries.filter(x => x.state === "recovered").map(x => x.group),
+    /** 本周次数已超过 2–3 次上限的部位（排课主约束） */
+    overFrequency: entries.filter(x => x.frequencyStatus === "above").map(x => x.group),
+    /** 本周次数还不够 2 次的部位（可以主动补一次） */
+    underFrequency: entries.filter(x => x.frequencyStatus === "below").map(x => x.group),
   };
 }

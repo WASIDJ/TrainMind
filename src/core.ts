@@ -6,6 +6,7 @@ import { relationScore, substitutionGraph } from "../knowledge/substitutions.ts"
 import { getGoalProfile, resolveRequiredStimulus } from "./training-knowledge/resolver.ts";
 import type { DecisionReason, ExperienceLevel, KnowledgeGoal, RequiredStimulus } from "./training-knowledge/types.ts";
 import { buildCapabilityEstimates, compatibleMovementEvidence, type CapabilityEstimates, type ExerciseCapabilityEstimate, type MovementCapabilityEstimate } from "./user-training-model/capability.ts";
+import { buildMuscleLedger, canonicalMuscle, WEEKLY_FREQUENCY_TARGET, type MuscleGroup } from "./muscles.ts";
 
 export type Environment = "home" | "office" | "gym";
 export type Intensity = "low" | "moderate" | "high";
@@ -187,6 +188,9 @@ for (const exercise of exercises) {
   }
   substitutionGraph[exercise.id] = existing;
 }
+
+// 肌群账本的输入：动作 id → 它训练的主肌群（RepDB 的解剖名原样传，muscles.ts 内部再映射）
+export const primaryMusclesByExerciseId: Record<string, string[]> = Object.fromEntries(exercises.map(exercise => [exercise.id, exercise.primaryMuscles]));
 
 const dangerPatterns = [/胸痛/, /呼吸(异常|困难)/, /眩晕/, /晕厥/, /麻木/, /(剧烈|突发).{0,4}疼痛/, /急性损伤/];
 export function safetyGate(input: string, context?: Pick<SessionContext, "painSignals">) { const signal = context?.painSignals[0], areaLabels: Record<string, string> = { chest: "胸部", shoulder: "肩部", lower_back: "腰背部", legs: "腿部", unknown: "身体" }; return dangerPatterns.some(pattern => pattern.test(input)) || Boolean(signal) ? { allowed: false, code: signal?.area === "chest" ? "chest_pain" : signal ? "active_pain" : "danger_signal", message: signal?.area === "chest" ? "检测到胸部疼痛信号。请停止训练并尽快寻求专业医疗帮助；本产品不提供诊断。" : signal ? `检测到${areaLabels[signal.area] ?? signal.area}疼痛。今天不生成普通训练，请先确认不适情况；如疼痛明显或持续，请寻求专业帮助。` : "检测到可能的危险信号。请停止训练并尽快寻求专业医疗帮助；本产品不提供诊断。" } : { allowed: true }; }
@@ -401,21 +405,29 @@ export function generateWorkout(context: SessionContext, facts: TrainingFacts = 
   const allowedEquipment = new Set(context.availableEquipmentIds ? context.availableEquipmentIds.filter(id => environmentEquipment.includes(id)) : environmentEquipment);
   const focusMuscles: Record<string, string[]> = { back: ["back", "latissimus_dorsi", "trapezius", "rhomboids", "erector_spinae"], chest: ["chest", "pectoralis_major", "rectus_abdominis"], legs: ["legs", "gluteus_maximus", "quadriceps", "hamstrings", "adductors"] };
   let candidates = exercises.filter(e => e.environments.includes(context.environment) && e.equipmentIds.some(id => allowedEquipment.has(id)) && (e.requiredEquipmentIds ?? []).every(id => allowedEquipment.has(id)) && !context.constraints.avoidExercises.includes(e.id) && !context.constraints.avoidMovements.some(pattern => e.movementPattern === pattern) && !(context.constraints.noJumping && e.impactLevel === "high")); if (context.focus && goal !== "upper_body" && goal !== "chest_strength") candidates = candidates.filter(e => e.primaryMuscles.some(m => (focusMuscles[context.focus!] ?? [context.focus!]).includes(m))); if (!candidates.length) throw new Error("当前环境和目标下没有可用动作，请调整目标或器械条件。");
-  // 用户自报酸痛真的影响排课(2026-11-10)：以前只在 safetyNotes 拼一句提示，照样排深蹲。
-  // 保守实现：只排除对应肌群的动作；过滤后候选不足 3 个就不过滤（宁可少避一点，也不能排不出课）。
-  // 依据：用户自报优先于算法估算（见 docs/EVIDENCE-RECOVERY.md）。
-  if (context.soreness.length) {
-    const soreMuscles: Record<string, string[]> = {
-      legs: ["legs", "quadriceps", "hamstrings", "glutes", "calves", "adductors", "hip_flexors", "gastrocnemius", "soleus", "gluteus_maximus", "gluteus_medius"],
-      chest: ["chest", "pectoralis_major", "rectus_abdominis"],
-      shoulder: ["rear_delt", "shoulder", "anterior_deltoid", "lateral_deltoid", "posterior_deltoid"],
-      lower_back: ["back", "erector_spinae", "latissimus_dorsi", "trapezius", "rhomboids"],
-    };
-    const banned = new Set(context.soreness.flatMap(area => soreMuscles[area] ?? []));
-    if (banned.size) {
-      const withoutSore = candidates.filter(e => !e.primaryMuscles.some(m => banned.has(m)));
-      if (withoutSore.length >= 3) candidates = withoutSore;
-    }
+  // 恢复约束的主口径(2026-11-10):同一肌群每周 2–3 次,超过上限本周不再给这个部位加容量。
+  // 依据:Schoenfeld 2016 频率 meta(DOI 10.1007/s40279-016-0543-8,见 docs/EVIDENCE-RECOVERY.md 第 2 条)。
+  // 小时数(muscles.ts 的 recoveryHours/recoveryPercent)只作展示层提示,不参与这里的取舍。
+  // 用户自报酸痛优先于任何估算(2026-11-10 7ed6444):酸痛按部位直接排除。
+  // 两处都保守:过滤后候选不足 3 个就不过滤,宁可少避一点,也不能排不出课。
+  const soreMuscles: Record<string, string[]> = {
+    legs: ["legs", "quadriceps", "hamstrings", "glutes", "calves", "adductors", "hip_flexors", "gastrocnemius", "soleus", "gluteus_maximus", "gluteus_medius"],
+    chest: ["chest", "pectoralis_major", "rectus_abdominis"],
+    shoulder: ["rear_delt", "shoulder", "anterior_deltoid", "lateral_deltoid", "posterior_deltoid"],
+    lower_back: ["back", "erector_spinae", "latissimus_dorsi", "trapezius", "rhomboids"],
+  };
+  const bannedMuscles = new Set<string>(context.soreness.flatMap(area => soreMuscles[area] ?? []));
+  const frequencyLedger = facts.sets.length ? buildMuscleLedger({
+    sets: facts.sets.map(set => ({ exerciseId: set.exerciseId, completedAt: set.completedAt, sessionId: set.sessionId, actualRepsSource: set.actualRepsSource })),
+    musclesByExercise: primaryMusclesByExerciseId,
+  }) : [];
+  const overFrequency = new Set<MuscleGroup>(frequencyLedger.filter(x => x.frequencyStatus === "above").map(x => x.group));
+  const blockedMuscle = (muscle: string) => bannedMuscles.has(muscle) || overFrequency.has(canonicalMuscle(muscle) as MuscleGroup);
+  const blockedExercise = (exercise: Exercise) => exercise.primaryMuscles.some(blockedMuscle);
+  let frequencyHold = new Set<MuscleGroup>(); // 实际生效的"本周次数已到上限"部位（候选够 3 个才生效）
+  if (bannedMuscles.size || overFrequency.size) {
+    const withoutBlocked = candidates.filter(exercise => !blockedExercise(exercise));
+    if (withoutBlocked.length >= 3) { candidates = withoutBlocked; frequencyHold = overFrequency; }
   }
   const selected = new Set<string>();
   const rank = (x: Exercise) => (model.exerciseCapabilities[x.id]?.recentPainEvent ? 1000 : 0) + (model.preferenceProfile.byExercise[x.id]?.skipCount ?? 0) * 10 + (model.preferenceProfile.byExercise[x.id]?.replaceCount ?? 0) * 5 + (model.preferenceProfile.byExercise[x.id]?.tooHardCount ?? 0) * 8 - Math.min(30, (model.preferenceProfile.byExercise[x.id]?.tooLightCount ?? 0) * 6);
@@ -464,12 +476,16 @@ export function generateWorkout(context: SessionContext, facts: TrainingFacts = 
       const timedCount = available >= 45 ? 2 : 1, remaining = available * 60 - durationBreakdown(all(), warmupMinutes, cooldownMinutes).totalSeconds - timedCount * TRANSITION_SECONDS;
       const timedBlock = recipe.blocks.some(x => x.type === "conditioning" || x.type === "mobility");
       if (remaining >= 2 * 60 && timedBlock) {
-        const seconds = timedCount === 2 ? [Math.round(remaining * .6), Math.floor(remaining * .4)] : [remaining];
-        const timedIds = timedCount === 2 ? ["march-in-place", "standing-mobility"] : [context.environment === "office" || goal === "mobility" ? "standing-mobility" : "march-in-place"];
-        for (const [i, id] of timedIds.entries()) {
+        const timedPlan: Array<[string, number]> = timedCount === 2
+          ? [["march-in-place", Math.round(remaining * .6)], ["standing-mobility", Math.floor(remaining * .4)]]
+          : [[context.environment === "office" || goal === "mobility" ? "standing-mobility" : "march-in-place", remaining]];
+        for (const [id, plannedSeconds] of timedPlan) {
           const definition = exercises.find(x => x.id === id)!;
+          // 这块绕过候选过滤，单独挡一次：本周次数已到上限的部位不再塞低强度收尾。
+          // 酸痛不在这一条里——低强度快走/活动度对酸痛是有益的，酸痛只挡该部位的力量动作。
+          if (definition.primaryMuscles.some(m => overFrequency.has(canonicalMuscle(m) as MuscleGroup))) continue;
           const item = toWorkoutExercise(definition, "accessory");
-          item.sets = 1; item.targetReps = `${seconds[i]}秒`; item.recommendation.sets = 1; item.recommendation.repRange = item.targetReps; item.restSeconds = 0;
+          item.sets = 1; item.targetReps = `${plannedSeconds}秒`; item.recommendation.sets = 1; item.recommendation.repRange = item.targetReps; item.restSeconds = 0;
           accessoryItems.push(item);
         }
       }
@@ -505,8 +521,9 @@ export function generateWorkout(context: SessionContext, facts: TrainingFacts = 
   if (context.availableEquipmentIds) decisionReasons.push({ type: "equipment", reason: `Exercise candidates were restricted to explicitly available equipment: ${context.availableEquipmentIds.join(", ")}.` });
   if (items.some(x => x.recommendation.progressionStep)) decisionReasons.push({ type: "progression", reason: "Recent completed sets support a small, explainable load or repetition progression.", ruleId: "history-progression-v1" });
   if (items.some(x => x.recommendation.action === "regress" || x.recommendation.action === "reduce_volume")) decisionReasons.push({ type: "regression", reason: "Recent difficult or incomplete work, fatigue, or high pattern volume limited this session's dose.", ruleId: "history-progression-v1" });
+  if (frequencyHold.size) decisionReasons.push({ type: "recovery", reason: `Weekly frequency is already at the ${WEEKLY_FREQUENCY_TARGET.min}–${WEEKLY_FREQUENCY_TARGET.max}x target for ${[...frequencyHold].join(", ")}; this week no extra volume is added to those muscles.`, ruleId: WEEKLY_FREQUENCY_TARGET.ruleId });
   const legacyRuleIds = ["session_movement_coverage_v0", "target_rir_v0", "set_range_v0", "progression_requires_history_v0", "duration_recipe_v0"];
-  const prescription: Prescription = { goal, workingSets, maxWorkingSets, availableDurationMinutes: available, plannedDurationMinutes: planned, optionalDurationMinutes: optional, movementPatterns: patterns, reasoningSummary, ruleIds: [...new Set([...legacyRuleIds, ...stimulus.ruleIds])], decisionReasons };
+  const prescription: Prescription = { goal, workingSets, maxWorkingSets, availableDurationMinutes: available, plannedDurationMinutes: planned, optionalDurationMinutes: optional, movementPatterns: patterns, reasoningSummary, ruleIds: [...new Set([...legacyRuleIds, ...stimulus.ruleIds, ...(frequencyHold.size ? [WEEKLY_FREQUENCY_TARGET.ruleId] : [])])], decisionReasons };
   return { schemaVersion: "1.2", sessionId: randomUUID(), userId: context.userId, createdAt: new Date().toISOString(), durationMinutes: available, availableDurationMinutes: available, durationIntent, plannedDurationMinutes: planned, optionalDurationMinutes: optional, goal, environment: context.environment, gymId: context.gymId, restrictions: context.restrictions, intensity: context.intensityPreference ?? (stimulus.goal === "recovery" || stimulus.goal === "mobility" || ["fatigued", "very_fatigued"].includes(context.recoveryState) ? "low" : "moderate"), status: "preview", warmupMinutes, exercises: items, blocks, prescription, requiredStimulus: stimulus, prescriptionDiagnostics: { totalWorkingSets: workingSets, movementPatternSets: patternSets, blockDuration }, cooldownMinutes, safetyNotes: context.soreness.length ? [`检测到${context.soreness.map(x => ({ chest: "胸", shoulder: "肩", lower_back: "腰背", legs: "腿", unknown: "" } as Record<string, string>)[x] ?? x).join("、")}部酸痛，今天会控制相关部位的强度，训练中如出现疼痛请立即停止。`] : [], estimatedDurationMinutes: planned, durationBreakdown: breakdown, durationShortfallReason: planned > available ? "最低安全处方超过可用时间。" : context.durationIntent === "target" && available - planned > 3 ? "当前动作库无法安全填满目标时长。" : undefined, runtime: { currentExerciseIndex: 0, currentSetNumber: 1, activeWorkoutMs: 0, events: [] } };
 }
 
