@@ -1,38 +1,77 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><title>TrainMind · 手机尺寸预览</title>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>TrainMind · 手机预览</title>
 <style>
-  body{margin:0;background:#1b1b1b;font:14px/1.5 -apple-system,system-ui,sans-serif;color:#ddd;
-       display:flex;align-items:center;justify-content:center;gap:32px;min-height:100vh;flex-wrap:wrap;padding:24px}
-  .frame{width:390px;height:844px;background:#000;border-radius:44px;padding:12px;box-shadow:0 24px 60px rgba(0,0,0,.6);position:relative;flex:0 0 auto}
-  .notch{position:absolute;top:22px;left:50%;transform:translateX(-50%);width:110px;height:26px;background:#000;border-radius:14px;z-index:2}
-  iframe{width:100%;height:100%;border:0;border-radius:34px;background:#fff;display:block}
-  .side{max-width:330px}
-  h1{font-size:15px;margin:0 0 12px;color:#fff;letter-spacing:.02em}
-  p{margin:0 0 10px;color:#9a9a9a;font-size:13px}
+  :root{--ink:#0d0d0f;--line:#2a2a2e}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:radial-gradient(1200px 700px at 30% 10%,#22242a,#0d0d0f 60%);
+       font:14px/1.5 -apple-system,system-ui,sans-serif;color:#e8e8ea;
+       display:flex;align-items:center;justify-content:center;gap:40px;flex-wrap:wrap;padding:28px}
+  /* 手机外壳 */
+  .phone{position:relative;width:390px;height:844px;background:#000;border-radius:54px;
+         padding:10px;box-shadow:0 0 0 2px #3a3a40,0 30px 70px rgba(0,0,0,.7);flex:0 0 auto}
+  .phone::before,.phone::after{content:"";position:absolute;background:#2b2b30;border-radius:3px;width:3px}
+  .phone::before{left:-3px;top:170px;height:56px;box-shadow:0 80px 0 #2b2b30,0 160px 0 #2b2b30}
+  .phone::after{right:-3px;top:200px;height:84px}
+  .screen{position:relative;width:100%;height:100%;border-radius:44px;overflow:hidden;background:#fff}
+  iframe{width:100%;height:100%;border:0;display:block;background:#fff}
+  /* 状态栏叠在应用上方 */
+  .status{position:absolute;top:0;left:0;right:0;height:44px;display:flex;align-items:center;
+          justify-content:space-between;padding:0 26px;font-size:13px;font-weight:600;color:#111;
+          pointer-events:none;z-index:3;text-shadow:0 1px 0 rgba(255,255,255,.5)}
+  .status .right{display:flex;align-items:center;gap:6px}
+  .bars{display:inline-flex;align-items:flex-end;gap:2px;height:10px}
+  .bars i{width:3px;background:#111;border-radius:1px;display:block}
+  .bars i:nth-child(1){height:4px}.bars i:nth-child(2){height:6px}.bars i:nth-child(3){height:8px}.bars i:nth-child(4){height:10px}
+  .batt{width:22px;height:11px;border:1.5px solid #111;border-radius:3px;position:relative}
+  .batt::after{content:"";position:absolute;left:1.5px;top:1.5px;bottom:1.5px;width:13px;background:#111;border-radius:1px}
+  .island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:112px;height:30px;background:#000;border-radius:18px;z-index:4}
+  .homebar{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:134px;height:5px;background:#1119;border-radius:3px;z-index:3;pointer-events:none}
+  /* 右侧说明 */
+  .side{max-width:320px}
+  h1{font-size:15px;margin:0 0 10px;letter-spacing:.02em}
+  p{margin:0 0 9px;color:#9a9aa2;font-size:13px}
   a{color:#c8f560;text-decoration:none}
-  code{background:#2a2a2a;padding:1px 5px;border-radius:4px;font-size:12px;color:#ddd}
-  .tip{border-left:2px solid #c8f560;padding-left:10px;margin-top:16px;color:#8a8a8a;font-size:12px}
+  code{background:#26262b;padding:1px 5px;border-radius:4px;font-size:12px}
+  .links{display:flex;gap:8px;margin:12px 0}
+  .links button{background:#1e1e23;color:#e8e8ea;border:1px solid #33333a;border-radius:999px;padding:6px 12px;font-size:12px;cursor:pointer}
+  .links button:hover{border-color:#c8f560;color:#c8f560}
+  .tip{border-left:2px solid #c8f560;padding-left:10px;margin-top:14px;color:#8a8a92;font-size:12px;line-height:1.6}
 </style></head>
 <body>
-  <div class="frame"><div class="notch"></div>
-    <iframe id="screen" src="http://localhost:3000/?user=demo-investor"></iframe>
-  </div>
-  <div class="side">
-    <h1>TrainMind · iPhone 尺寸预览（390 × 844）</h1>
-    <p>左边就是 App 在手机上的实际布局。可以正常点击、输入、走完一场训练。</p>
-    <p>换用户：<a href="#" onclick="document.getElementById('screen').src='http://localhost:3000/?user=demo-investor';return false">demo-investor</a> ·
-       <a href="#" onclick="document.getElementById('screen').src='http://localhost:3000/?user=demo-user';return false">demo-user</a></p>
-    <p>不满意 390 宽？直接改本文件里的 <code>.frame</code> 宽高（例如 375×812 是 iPhone X/XS）。</p>
-    <div class="tip">
-      这不是 iOS 原生 App，Xcode 模拟器看不到它——<br>
-      要看真机：<code>./start-7b3.sh --mobile</code>，手机与电脑同一 Wi-Fi，<br>
-      用终端打印的访问口令打开；Android 也可以 <code>adb reverse tcp:3100 tcp:3000</code>。
+  <div class="phone" id="phone">
+    <div class="screen">
+      <div class="island"></div>
+      <div class="status">
+        <span id="clock">9:41</span>
+        <span class="right"><span class="bars"><i></i><i></i><i></i><i></i></span><span class="batt"></span></span>
+      </div>
+      <iframe id="screen" src="http://localhost:3000/?user=demo-investor" title="TrainMind 应用"></iframe>
+      <div class="homebar"></div>
     </div>
   </div>
-  <script>
-    // 大小自适应：窗口太矮时整体缩小，避免上下被裁
-    const fit = () => { const f = document.querySelector('.frame');
-      const s = Math.min(1, (window.innerHeight - 60) / 868); f.style.transform = `scale(${s})`; f.style.transformOrigin = 'center'; };
-    fit(); addEventListener('resize', fit);
-  </script>
+  <div class="side">
+    <h1>TrainMind · 手机预览（390 × 844）</h1>
+    <p>这就是应用在手机上的真实布局，可以直接点、输入、走完一场训练。</p>
+    <div class="links">
+      <button data-user="demo-investor">demo-investor</button>
+      <button data-user="demo-user">demo-user</button>
+      <button id="reload">重新加载</button>
+    </div>
+    <p>尺寸不满意？改本页 <code>.phone</code> 的宽高（375×812 是 iPhone X）。</p>
+    <div class="tip">
+      这是 Web 应用，不是 iOS 原生包，Xcode 模拟器看不到它。<br>
+      真机：<code>./start-7b3.sh --mobile</code>，手机同 Wi-Fi 用终端口令打开。
+    </div>
+  </div>
+<script>
+  // 状态栏时间跟随真实时间
+  const clock = () => { const d = new Date(); document.getElementById('clock').textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); };
+  clock(); setInterval(clock, 20000);
+  // 窗口太矮时整体缩放，避免手机壳被裁
+  const fit = () => { const p = document.getElementById('phone'); const s = Math.min(1, (innerHeight - 56) / 874); p.style.transform = `scale(${s})`; p.style.transformOrigin = 'center'; };
+  fit(); addEventListener('resize', fit);
+  // 换用户 / 重载
+  document.querySelectorAll('[data-user]').forEach(b => b.onclick = () => { document.getElementById('screen').src = 'http://localhost:3000/?user=' + b.dataset.user; });
+  document.getElementById('reload').onclick = () => { const f = document.getElementById('screen'); f.src = f.src; };
+</script>
 </body></html>
