@@ -135,3 +135,17 @@ test("RepDB 动作补齐禁忌标签，自研动作不受影响", () => {
   assert.deepEqual(authored.contraindicationTags, ["knee_pain"], "自研动作维持手写标签");
   assert.equal(authored.attributionRequired, false, "自研动作不带 RepDB 署名标记");
 });
+
+// 2026-11-10：用户自报酸痛必须真的影响排课。
+// 旧行为：只在 safetyNotes 拼一句"会控制相关部位强度"，照样排深蹲（说一套做一套）。
+test("酸痛真的影响排课：腿酸时不排腿/臀/小腿，且对照组不受影响", async () => {
+  const control = await createWorkout("我在家，有30分钟，徒手，想练全身。", "sore-control", new RuleLanguageModelProvider());
+  const sore = await createWorkout("我在家，有30分钟，徒手，想练全身，今天腿有点酸。", "sore-filter", new RuleLanguageModelProvider());
+  const soreNames = sore.workout!.exercises.map(x => x.name);
+  assert.ok(soreNames.length >= 3, `过滤后仍要能排出计划，实际 ${soreNames.length} 个`);
+  assert.ok(!soreNames.some(n => /深蹲|髋铰链|提踵|箭步|臀桥/.test(n)), `腿酸却排了腿部动作：${soreNames.join("/")}`);
+  assert.match(sore.workout!.safetyNotes?.[0] ?? "", /腿部酸痛/);
+  // 对照组（不说酸痛）保持原样：仍是 6 个动作，含深蹲
+  const controlNames = control.workout!.exercises.map(x => x.name);
+  assert.ok(controlNames.some(n => /深蹲/.test(n)), "不酸的用户不该被误伤");
+});

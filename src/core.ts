@@ -399,8 +399,24 @@ export function generateWorkout(context: SessionContext, facts: TrainingFacts = 
   const stimulus = resolveRequiredStimulus({ rawInput: context.rawInput ?? "", interpretedGoal, durationMinutes: available, durationIntent, recoveryState: context.recoveryState, experienceLevel: context.experienceLevel, previousTraining: context.previousTraining, movementPatternLoads: model.movementPatternLoads });
   const environmentEquipment = context.environment === "gym" && context.gymId ? ["bodyweight", ...gymEquipment.filter(x => x.gymId === context.gymId && x.available).map(x => x.equipmentId)] : context.environment === "home" ? ["bodyweight", "dumbbell", "resistance_band"] : context.environment === "office" ? ["bodyweight", "resistance_band"] : ["bodyweight", "dumbbell", "barbell", "cable", "machine", "bench", "resistance_band", "pull_up_bar", "rings"];
   const allowedEquipment = new Set(context.availableEquipmentIds ? context.availableEquipmentIds.filter(id => environmentEquipment.includes(id)) : environmentEquipment);
-  const focusMuscles: Record<string, string[]> = { back: ["back", "latissimus_dorsi", "trapezius", "rhomboids", "erector_spinae"], chest: ["chest", "pectoralis_major"], legs: ["legs", "gluteus_maximus", "quadriceps", "hamstrings", "adductors"] };
+  const focusMuscles: Record<string, string[]> = { back: ["back", "latissimus_dorsi", "trapezius", "rhomboids", "erector_spinae"], chest: ["chest", "pectoralis_major", "rectus_abdominis"], legs: ["legs", "gluteus_maximus", "quadriceps", "hamstrings", "adductors"] };
   let candidates = exercises.filter(e => e.environments.includes(context.environment) && e.equipmentIds.some(id => allowedEquipment.has(id)) && (e.requiredEquipmentIds ?? []).every(id => allowedEquipment.has(id)) && !context.constraints.avoidExercises.includes(e.id) && !context.constraints.avoidMovements.some(pattern => e.movementPattern === pattern) && !(context.constraints.noJumping && e.impactLevel === "high")); if (context.focus && goal !== "upper_body" && goal !== "chest_strength") candidates = candidates.filter(e => e.primaryMuscles.some(m => (focusMuscles[context.focus!] ?? [context.focus!]).includes(m))); if (!candidates.length) throw new Error("当前环境和目标下没有可用动作，请调整目标或器械条件。");
+  // 用户自报酸痛真的影响排课(2026-11-10)：以前只在 safetyNotes 拼一句提示，照样排深蹲。
+  // 保守实现：只排除对应肌群的动作；过滤后候选不足 3 个就不过滤（宁可少避一点，也不能排不出课）。
+  // 依据：用户自报优先于算法估算（见 docs/EVIDENCE-RECOVERY.md）。
+  if (context.soreness.length) {
+    const soreMuscles: Record<string, string[]> = {
+      legs: ["legs", "quadriceps", "hamstrings", "glutes", "calves", "adductors", "hip_flexors", "gastrocnemius", "soleus", "gluteus_maximus", "gluteus_medius"],
+      chest: ["chest", "pectoralis_major", "rectus_abdominis"],
+      shoulder: ["rear_delt", "shoulder", "anterior_deltoid", "lateral_deltoid", "posterior_deltoid"],
+      lower_back: ["back", "erector_spinae", "latissimus_dorsi", "trapezius", "rhomboids"],
+    };
+    const banned = new Set(context.soreness.flatMap(area => soreMuscles[area] ?? []));
+    if (banned.size) {
+      const withoutSore = candidates.filter(e => !e.primaryMuscles.some(m => banned.has(m)));
+      if (withoutSore.length >= 3) candidates = withoutSore;
+    }
+  }
   const selected = new Set<string>();
   const rank = (x: Exercise) => (model.exerciseCapabilities[x.id]?.recentPainEvent ? 1000 : 0) + (model.preferenceProfile.byExercise[x.id]?.skipCount ?? 0) * 10 + (model.preferenceProfile.byExercise[x.id]?.replaceCount ?? 0) * 5 + (model.preferenceProfile.byExercise[x.id]?.tooHardCount ?? 0) * 8 - Math.min(30, (model.preferenceProfile.byExercise[x.id]?.tooLightCount ?? 0) * 6);
   const preferredRecipeId = /恢复训练|恢复一下/.test(context.rawInput) ? "recovery" : context.environment === "office" ? "desk_break" : /有氧|心肺|体能/.test(context.rawInput) ? "general_conditioning" : undefined;
