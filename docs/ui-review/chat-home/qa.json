@@ -1,0 +1,52 @@
+[
+  {
+    "width": 390,
+    "height": 844,
+    "overflow": false,
+    "inputVisible": true,
+    "navTop": 783,
+    "sendBottom": 746
+  },
+  {
+    "width": 320,
+    "height": 568,
+    "overflow": false,
+    "inputVisible": true,
+    "navTop": 507,
+    "sendBottom": 471
+  },
+  {
+    "width": 1280,
+    "height": 900,
+    "overflow": false,
+    "inputVisible": true,
+    "navTop": 839,
+    "sendBottom": 802
+  },
+  {
+    "width": 390,
+    "height": 440,
+    "overflow": false,
+    "inputVisible": true,
+    "navTop": 379,
+    "sendBottom": 343
+  },
+  {
+    "intent": "real service route, returns with messages"
+  },
+  {
+    "chat": "real /api/coach reply"
+  },
+  {
+    "persistence": "reload restores conversation"
+  },
+  {
+    "failure": "visible error, exact retry without duplicate user turn"
+  },
+  {
+    "safety": "home chat with active preview does not change workout"
+  },
+  {
+    "resume": "existing workout reopens plan"
+  }
+]
