@@ -1,6 +1,8 @@
 import { createServer } from "node:http";
 import { CommunityStore, createCommunityHandler } from "./community.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
@@ -1275,7 +1277,37 @@ server.on("error", (error: NodeJS.ErrnoException) => {
   if (error.code === "EADDRINUSE") { console.error(`端口 ${port} 已被占用——大概率已有一个 TrainMind 实例在跑。先停掉旧实例,或换一个端口(如 PORT=3100)。`); process.exit(1); }
   throw error;
 });
+// 启动自检(2026-11-09)：源码比进程新 = 你在跑旧代码。
+// 今天这个坑造成过三次假故障（其中一次是底部导航全崩，因为 /community.js 在旧进程里 404）。
+const bootedAt = Date.now();
+let lastStaleKey = "";
+function warnIfStaleCode() {
+  try {
+    const files: string[] = [];
+    const walk = (dir: string, depth: number) => {
+      if (depth > 3) return;
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) walk(full, depth + 1);
+        else if (/\.(ts|js|html|css)$/.test(entry.name)) files.push(full);
+      }
+    };
+    const root = fileURLToPath(new URL("..", import.meta.url));
+    for (const sub of ["src", "public"]) walk(join(root, sub), 0);
+    const stale = files.filter(f => statSync(f).mtimeMs > bootedAt);
+    const key = stale.map(f => f).sort().join("|");
+    if (stale.length && key !== lastStaleKey) {
+      lastStaleKey = key;
+      console.warn(`⚠️  有 ${stale.length} 个源码文件比本进程新，当前跑的是旧代码（先重启再验证）:`);
+      for (const f of stale.slice(0, 5)) console.warn(`   - ${f.replace(root, "")}`);
+    }
+  } catch { /* 自检失败不影响服务 */ }
+}
 server.listen(port, host, () => console.log(`TrainMind running at http://localhost:${port} (bound to ${host}; SQLite: ${dbPath})`));
+  warnIfStaleCode();
+  // 启动时必然没有"更新的文件"，所以真正有用的是运行期检查（今天踩过三次旧进程坑）。
+  setInterval(warnIfStaleCode, 15_000).unref();
 export { server };
 
 // A4(2026-11-09):兜底 —— 任何漏网的 promise 拒绝只记日志,不许带走正在进行的训练。
