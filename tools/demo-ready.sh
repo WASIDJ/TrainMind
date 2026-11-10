@@ -20,6 +20,11 @@ echo "① 生成演示数据（demo 用户：$USER_ID）"
 # 演示当场要看到板有内容 → 显式把种子场次升格成 human；演示结束后去掉这个开关重造，
 # 或按 TRAINMIND_RELABEL_USERS 复标，别让合成数据长期混在真人口径里（2026-11-09 复核 Medium-2）。
 TRAINMIND_DEMO_USER="$USER_ID" TRAINMIND_DEMO_AS_HUMAN="${TRAINMIND_DEMO_AS_HUMAN:-1}" TRAINMIND_APPLY=1 node tools/demo-seed.ts 2>&1 | grep -E "训练场次|课程|备份|已写入" | sed 's/^/  /'
+echo "①b 社区演示内容（6 个身份 / 6 条帖子 / 互相关注）"
+# 社区是服务端存储，不是 localStorage —— 重造演示数据时一起刷，否则演示库干净了、社区还留着上一轮。
+# 幂等：脚本先按固定 id 删旧再插，跑几次都是 6/6/30/18/2。
+TRAINMIND_APPLY=1 node tools/demo-community-seed.ts 2>&1 | grep -E "备份|已写入|失败|回滚" | sed 's/^/  /'
+
 
 echo "② 自检"
 if curl -sf -o /dev/null "$BASE/"; then ok "服务在跑（$BASE）"; else bad "服务没在跑 —— 先在另一个终端执行 ./start-7b3.sh"; fi
