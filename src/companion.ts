@@ -55,11 +55,11 @@ export function classifyMood(text: string | undefined | null): MoodSignal {
 }
 
 const MOOD_TEXT: Record<Exclude<MoodSignal, "neutral">, string> = {
-  self_blame: "别因为一顿饭给自己定罪。吃多了不等于失败，明天按原计划来就行，我不会翻旧账。",
-  anxious: "你现在需要的不是更狠的计划。今天只要动一小会儿就够了，剩下的交给睡眠和规律。",
-  plateau: "平台期不是退步，是身体在适应。这时候换动作、调次数比加量更有用——下次我帮你换。",
-  want_quit: "不想练是真的，不是你懒。那今天就别按计划来，做五分钟收工也算数。",
-  tired: "累了就先歇。休息是计划的一部分，不是欠账。",
+  self_blame: "别因为一顿饭给自己定罪，吃多了不等于失败，我不会翻旧账。下一件小事：明天照原计划练，吃的正常吃就行。",
+  anxious: "你现在需要的不是更狠的计划。下一件小事：今天只做五分钟，做完就收，剩下的交给睡眠。",
+  plateau: "平台期不是退步，是身体在适应。下一件小事：下次换个动作或调次数，我帮你换，别自己加量。",
+  want_quit: "不想练是真的，不是你懒。下一件小事：今天不做计划，做五分钟就收工。",
+  tired: "累了就先歇，休息是计划的一部分、不是欠账。下一件小事：睡够，明天照计划的量来。",
 };
 
 const PERSONA_TONE: Record<CompanionPersona, string> = {
@@ -82,10 +82,10 @@ export function buildCheckIn(input: CheckInInput): CheckIn {
     return { kind: "comfort", mood, text: MOOD_TEXT[mood], tone, facts: { ...facts, mood } };
   }
   if (input.trainedToday) {
-    return { kind: "trained_today", mood, text: "今天已经练过了。剩下的交给吃和睡——长肌肉是在休息的时候。", tone, facts };
+    return { kind: "trained_today", mood, text: "今天你来了，这就够了。剩下的交给吃和睡——长肌肉是在休息的时候。", tone, facts };
   }
   if (input.totalSessions === 0) {
-    return { kind: "first_time", mood, text: "先不用定什么大目标。今天动十分钟就算开始了，我会按你的状态排。", tone, facts };
+    return { kind: "first_time", mood, text: "先说清楚：我们不承诺一个月瘦多少。能一直练下去比暴瘦重要——今天动十分钟就算开始。", tone, facts };
   }
   const days = input.daysSinceLast ?? 0;
   if (days >= 14) {

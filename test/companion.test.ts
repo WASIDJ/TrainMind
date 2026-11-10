@@ -40,9 +40,26 @@ test("陪伴：连续周要给具体肯定，不空喊", () => {
   assert.match(r2.text, /4 周/, "肯定要带具体数字");
 });
 
-test("陪伴：新用户不设大目标", () => {
+test("陪伴：新用户不设大目标，且第一次就做预期管理（不承诺效果）", () => {
   const r = buildCheckIn({ daysSinceLast: null, streakWeeks: 0, totalSessions: 0 });
   assert.equal(r.kind, "first_time");
+  assert.match(r.text, /不承诺/, "第一次就要把期待拉回真实");
+  assert.doesNotMatch(r.text, /斤|瘦多少天/, "不许出现具体减重承诺");
+});
+
+test("陪伴：安抚之后必须给一件可执行的小事，不是喊口号", () => {
+  for (const msg of ["我又吃多了", "一直不掉秤", "不想练了", "很焦虑"]) {
+    const r = buildCheckIn({ daysSinceLast: 2, streakWeeks: 1, totalSessions: 5, lastMessage: msg });
+    assert.equal(r.kind, "comfort");
+    assert.match(r.text, /下一件小事/, `${msg} 的安抚里缺少可执行的下一步`);
+  }
+});
+
+test("陪伴：今天练过夸的是'来了'，不是数字", () => {
+  const r = buildCheckIn({ daysSinceLast: 0, streakWeeks: 2, totalSessions: 6, trainedToday: true });
+  assert.equal(r.kind, "trained_today");
+  assert.match(r.text, /你来了/);
+  assert.doesNotMatch(r.text, /\d+ *次|\d+ *斤/, "过程性肯定不带数字");
 });
 
 test("陪伴：话术带事实依据，便于事后核对为什么这么说", () => {
