@@ -12,20 +12,21 @@
   .phone::before,.phone::after{content:"";position:absolute;background:#2b2b30;border-radius:3px;width:3px}
   .phone::before{left:-3px;top:170px;height:56px;box-shadow:0 80px 0 #2b2b30,0 160px 0 #2b2b30}
   .phone::after{right:-3px;top:200px;height:84px}
-  .screen{position:relative;width:100%;height:100%;border-radius:44px;overflow:hidden;background:#fff}
+  .screen{position:relative;width:100%;height:100%;border-radius:44px;overflow:hidden;background:#0d0d10;
+         padding-top:44px}   /* 顶部 44px 留给状态栏，App 内容从下方开始 */
   iframe{width:100%;height:100%;border:0;display:block;background:#fff}
   /* 状态栏叠在应用上方 */
   .status{position:absolute;top:0;left:0;right:0;height:44px;display:flex;align-items:center;
-          justify-content:space-between;padding:0 26px;font-size:13px;font-weight:600;color:#111;
-          pointer-events:none;z-index:3;text-shadow:0 1px 0 rgba(255,255,255,.5)}
+          justify-content:space-between;padding:0 26px;font-size:13px;font-weight:600;color:#f2f2f4;
+          pointer-events:none;z-index:3;background:#0d0d10}
   .status .right{display:flex;align-items:center;gap:6px}
   .bars{display:inline-flex;align-items:flex-end;gap:2px;height:10px}
-  .bars i{width:3px;background:#111;border-radius:1px;display:block}
+  .bars i{width:3px;background:#f2f2f4;border-radius:1px;display:block}
   .bars i:nth-child(1){height:4px}.bars i:nth-child(2){height:6px}.bars i:nth-child(3){height:8px}.bars i:nth-child(4){height:10px}
-  .batt{width:22px;height:11px;border:1.5px solid #111;border-radius:3px;position:relative}
-  .batt::after{content:"";position:absolute;left:1.5px;top:1.5px;bottom:1.5px;width:13px;background:#111;border-radius:1px}
+  .batt{width:22px;height:11px;border:1.5px solid #f2f2f4;border-radius:3px;position:relative}
+  .batt::after{content:"";position:absolute;left:1.5px;top:1.5px;bottom:1.5px;width:13px;background:#f2f2f4;border-radius:1px}
   .island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:112px;height:30px;background:#000;border-radius:18px;z-index:4}
-  .homebar{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:134px;height:5px;background:#1119;border-radius:3px;z-index:3;pointer-events:none}
+  .homebar{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:134px;height:5px;background:#ffffff40;border-radius:3px;z-index:3;pointer-events:none}
   /* 右侧说明 */
   .side{max-width:320px}
   h1{font-size:15px;margin:0 0 10px;letter-spacing:.02em}
