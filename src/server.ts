@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { CommunityStore, createCommunityHandler } from "./community.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
@@ -52,6 +53,8 @@ db.exec(`
 `);
 // Telemetry v2 迁移(冻结规格 v1.0.1):fresh 建表 / legacy 加法补列,可重入,详见 src/telemetry/
 migrateTelemetry(db);
+const community = new CommunityStore(db, exercises);
+const handleCommunity = createCommunityHandler(community);
 const runtimeTelemetry = new RuntimeTelemetry(db); // 7B.2:域 /actions → v2 遥测桥(失败不阻断产品动作)
 const upsertCatalog = (table: string, id: string, data: unknown) => db.prepare(`INSERT OR REPLACE INTO ${table} (id, data_json) VALUES (?, ?)`).run(id, JSON.stringify(data));
 equipment.forEach(x => upsertCatalog("equipment", x.id, x));
@@ -487,9 +490,10 @@ const server = createServer(async (req, res) => {
         if (!localHosts.has(originName)) return json(res, 403, { error: "已拒绝跨站请求。" });
       }
     }
+    if (await handleCommunity(req, res)) return;
     if (req.method === "GET" && ["/workout-atmosphere.png", "/tm-ring.png"].includes(url.pathname)) return sendFile(res, "image/png", url.pathname === "/tm-ring.png" ? new URL("../public/tm-ring.png", import.meta.url) : atmospherePath, "public, max-age=86400");
     if (req.method === "GET" && url.pathname === "/phone-preview.html") return sendFile(res, "text/html; charset=utf-8", new URL("../public/phone-preview.html", import.meta.url), "no-store");
-    if (req.method === "GET" && ["/visual-design.css", "/visual-design.js", "/home-chat.css", "/home-chat.js"].includes(url.pathname)) {
+    if (req.method === "GET" && ["/visual-design.css", "/visual-design.js", "/home-chat.css", "/home-chat.js", "/community.css", "/community.js"].includes(url.pathname)) {
       const mime = url.pathname.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8";
       return sendFile(res, mime, new URL(`../public${url.pathname}`, import.meta.url), "no-cache");
     }
@@ -502,7 +506,7 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "GET" && url.pathname === "/trainmind-ui.css") return sendFile(res, "text/css; charset=utf-8", new URL("../public/trainmind-ui.css", import.meta.url), "no-cache");
     if (req.method === "GET" && svgAssets.has(url.pathname.slice(1))) return sendFile(res, "image/svg+xml", new URL(`../public/${url.pathname.slice(1)}`, import.meta.url), "public, max-age=86400");
-    if (req.method === "GET" && (url.pathname === "/" || (url.pathname === "/experiment" && devPageEnabled))) return sendFile(res, "text/html; charset=utf-8", htmlPath);
+    if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/community" || (url.pathname === "/experiment" && devPageEnabled))) return sendFile(res, "text/html; charset=utf-8", htmlPath);
     // 组内听觉感知模块(纯 JS,浏览器 <script type="module"> 加载;no-store 便于本地迭代)
     if (req.method === "GET" && url.pathname === "/perception.js") return sendFile(res, "text/javascript; charset=utf-8", fileURLToPath(new URL("./perception.js", import.meta.url)), "no-store");
     // 组内感知自检页(真机验收工具):实时看基线与触发,把"它在听吗"变成可见

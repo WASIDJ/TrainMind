@@ -1,0 +1,76 @@
+[
+  {
+    "publicFeed": true,
+    "imagesLoaded": true,
+    "navigationItems": 5
+  },
+  {
+    "registration": true,
+    "independentId": "3e796613-52b7-42d8-bb39-808bef19f793"
+  },
+  {
+    "consentedPlanSummary": true,
+    "explainablePathmates": true
+  },
+  {
+    "follow": true,
+    "followingFeed": true
+  },
+  {
+    "like": true,
+    "comment": true
+  },
+  {
+    "realPhotoUpload": true,
+    "publish": true,
+    "escapedContent": true
+  },
+  {
+    "width": 390,
+    "height": 844,
+    "overflow": false,
+    "navVisible": true,
+    "postCount": 4
+  },
+  {
+    "width": 320,
+    "height": 568,
+    "overflow": false,
+    "navVisible": true,
+    "postCount": 4
+  },
+  {
+    "width": 1280,
+    "height": 900,
+    "overflow": false,
+    "navVisible": true,
+    "postCount": 4
+  },
+  {
+    "width": 390,
+    "height": 440,
+    "overflow": false,
+    "navVisible": true,
+    "postCount": 4
+  },
+  {
+    "sessionAndPostSurviveReload": true
+  },
+  {
+    "ownProfile": true,
+    "deleteOwnPost": true
+  },
+  {
+    "asyncNavigationPreserved": true,
+    "canonicalNavigation": true
+  },
+  {
+    "communityDidNotChangeTrainingHistory": true
+  },
+  {
+    "deleteOwnAccountUI": true
+  },
+  {
+    "moderationToolHideSuspendAndAudit": true
+  }
+]
