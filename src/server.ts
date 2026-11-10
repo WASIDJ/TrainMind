@@ -488,6 +488,7 @@ const server = createServer(async (req, res) => {
       }
     }
     if (req.method === "GET" && ["/workout-atmosphere.png", "/tm-ring.png"].includes(url.pathname)) return sendFile(res, "image/png", url.pathname === "/tm-ring.png" ? new URL("../public/tm-ring.png", import.meta.url) : atmospherePath, "public, max-age=86400");
+    if (req.method === "GET" && url.pathname === "/phone-preview.html") return sendFile(res, "text/html; charset=utf-8", new URL("../public/phone-preview.html", import.meta.url), "no-store");
     if (req.method === "GET" && ["/visual-design.css", "/visual-design.js", "/home-chat.css", "/home-chat.js"].includes(url.pathname)) {
       const mime = url.pathname.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8";
       return sendFile(res, mime, new URL(`../public${url.pathname}`, import.meta.url), "no-cache");
