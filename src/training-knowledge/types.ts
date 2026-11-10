@@ -9,9 +9,11 @@ export interface GoalProfile {
   reps: { minimum: number; maximum: number; ruleId: string };
   restSeconds: { minimum: number; maximum: number; ruleId: string };
   targetRir: { minimum: number; maximum: number; ruleId: string };
+  // FROZEN（2026-11-10）：周容量目标只算不用。出处说的是"肌群/全身周容量"，我们按【动作模式】扣减，
+  // 单位对不上，也没有任何调用方读它。启用前必须先统一到肌群口径并复核出处（见 docs/PROGRESS.md 第二十四节）。
   weeklySetsTarget?: { value: number; ruleId: string };
   durationPolicyRuleId: string;
 }
 export interface TrainingKnowledgeRegistry { version: string; sources: EvidenceSource[]; rules: EvidenceRule[]; goals: Record<KnowledgeGoal, GoalProfile>; experienceSetPreference: Record<ExperienceLevel, number>; progression: { minimumStrengthEvidenceSets: number; minimumRepProgressionSets: number; ruleId: string }; }
 export interface DecisionReason { type: "goal" | "history" | "recovery" | "knowledge" | "constraint" | "equipment" | "time" | "experience" | "progression" | "regression"; reason: string; ruleId?: string }
-export interface RequiredStimulus { goal: KnowledgeGoal; experienceLevel: ExperienceLevel; primaryPatterns: string[]; secondaryPatterns: string[]; accessoryPatterns: string[]; setsPerExercise: number; repRange: string; restSeconds: number; targetRir: number; weeklySetsRemainingByPattern: Record<string, number>; workingSetCap: number; exerciseCountRange: [number, number]; ruleIds: string[]; decisionReasons: DecisionReason[] }
+export interface RequiredStimulus { goal: KnowledgeGoal; experienceLevel: ExperienceLevel; primaryPatterns: string[]; secondaryPatterns: string[]; accessoryPatterns: string[]; setsPerExercise: number; repRange: string; restSeconds: number; targetRir: number; /** FROZEN：只记录、不参与排课（core.ts 不读）。见 GoalProfile.weeklySetsTarget */ weeklySetsRemainingByPattern: Record<string, number>; workingSetCap: number; exerciseCountRange: [number, number]; ruleIds: string[]; decisionReasons: DecisionReason[] }

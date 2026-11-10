@@ -80,6 +80,7 @@
 | 感知阈值真机校准 | 需要 owner 练 2-3 场收集数据 |
 | 单场时长型动作（540 秒）展示 | 计划和组内目标均显示「9 分钟」 |
 | 旧 Chrome 前端套件 | `npm run test:browser` 为 **28 项 / 16–17 过 / 11–12 败**（抖动项是 `a user gesture resumes synthesis`，两次跑交替过/红）。稳定失败仍是 D17 前文案/时序预期与 Windows 专属离线识别，套件更新仍是独立工作项，证据见 `device-acceptance/20261106-175300-browser-e2e/` |
+| 周容量目标的 ruleIds 广告（处方里仍列着 `acsm-hypertrophy-weekly-volume-2026`，实际未应用） | 已知瑕疵，需要单独一轮清（改它会动既有断言），见第二十四节 |
 | 审计存量缺陷（46 条已清零） | 清单见 [AUDIT-BACKLOG.md](AUDIT-BACKLOG.md)。**46/46 全部修完**（2026-11-09），最后三条按 owner 裁决落地：D22 报数可选、D23 本地时区、D24 真实训练缺省 human（含存量 34 场改标） |
 
 ## 六、已知坑（别再踩）
@@ -370,3 +371,28 @@
 **已知遗留（不是本次引入）**：社区页右下角"分享此刻"胶囊和帖子底部那行文字重叠；属另一条前端工作线，未动。
 
 **未做**：不碰 `demo-investor` 的训练数据；社区里没给演示用户造假关注数。
+
+## 二十四、周容量目标冻结（2026-11-10）
+
+**起因**：上一轮结尾把"`weeklySetsRemainingByPattern` 算出来但从不读"列成下一件事，准备接进容量分配。owner 觉得方向不对，要求先列前因后果去外部求证。
+
+**核出来的三个问题**：
+
+| 问题 | 事实 |
+|---|---|
+| 单位错配 | `training-principles.json` 的规则原文是"周容量 ≥10 组"（sourceId `acsm-rt-2026`，DOI `10.1249/MSS.0000000000003897`），出处按**肌群/全身**表述；代码按**动作模式**扣减。腿部 squat/hinge/lunge 各算 10 组 = 腿一周 30 组 |
+| 与前两条规则打架 | 现在生效的是肌群级：24 小时内不重复、每周 2–3 次（`src/muscles.ts`）。再加一条按模式的限制 = 两套单位同事生效，解释不清 |
+| 出处本身也待定 | "≥10 组/周"更经典的出处是 Schoenfeld 2017 剂量-反应 meta（DOI `10.1080/02640414.2016.1210197`，按肌群）；ACSM 那份是二次综述。挂哪个都行，但不能挂一个、按另一个单位执行 |
+
+**裁决（owner 选 B）**：**冻结，不接线**。等"按肌群统一周容量口径 + 复核出处"作为独立课题做完再谈。
+
+**落地（零行为变化）**：
+
+- `knowledge/training-principles.json`：该 rule 的 notes 改成 `FROZEN 2026-11-10 — computed but never applied to scheduling.`，写明单位错配与启用前提（原注释保留在末尾）
+- `src/training-knowledge/resolver.ts`：`weeklySetsRemainingByPattern` 上方写清冻结原因与启用前提
+- `src/training-knowledge/types.ts`：两处类型字段标注 `FROZEN`（只记录、不参与排课）
+- 新增护栏测试"周容量目标保持冻结"：扫 `src/core.ts` 源码，一旦有人读这个字段或应用该 ruleId **立刻红**；同时断言字段仍被计算、剩余量不为负
+
+**已知瑕疵（本次不动，属独立清理）**：`resolver.ts` 仍把 `acsm-hypertrophy-weekly-volume-2026` 放进 `stimulus.ruleIds`（即处方"声称"应用了这条规则，实际没有）。改它会牵动 `test/training-knowledge.test.ts` 的既有断言，按纪律不在本轮动，已记入未决事项。
+
+**验证**：`npm test` 连跑两次 **363 项 / 362 过 / 1 skip / 0 败**（新增 1 项护栏）。

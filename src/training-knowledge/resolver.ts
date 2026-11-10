@@ -58,6 +58,12 @@ export function resolveRequiredStimulus(input: StimulusInput): RequiredStimulus 
   if (input.recoveryState === "fatigued" || input.recoveryState === "very_fatigued") setsPerExercise = Math.max(profile.sets.minimum, setsPerExercise - 1);
   const workingSetCap = Math.min(24, Math.max(input.durationMinutes <= 10 ? 6 : input.durationMinutes <= 20 ? 10 : input.durationMinutes <= 30 ? 14 : input.durationMinutes <= 45 ? 18 : 22, Math.ceil(input.durationMinutes / 3)));
   const exerciseCountRange: [number, number] = input.durationMinutes <= 10 ? [2, 3] : input.durationMinutes <= 20 ? [3, 5] : input.durationMinutes <= 30 ? [4, 7] : input.durationMinutes <= 45 ? [5, 9] : [6, 10];
+  // FROZEN（2026-11-10）：周容量目标只算不用。
+  // 出处（ACSM 2026 Overview of Reviews）说的是"肌群/全身周容量 ≥10 组"，我们这里按【动作模式】扣减，
+  // 单位对不上（腿部三个模式各算 10 组 = 腿一周 30 组）；而实际管排课的是肌群级的两条硬规则
+  // （24 小时间隔、每周 2–3 次，见 src/muscles.ts）。两套单位同时生效会让"为什么今天不让我练腿"答不清。
+  // 启用前提：先统一到肌群口径并复核出处（docs/PROGRESS.md 第二十四节）。
+  // 护栏测试：test/training-knowledge.test.ts 的"周容量目标保持冻结"会在 core.ts 读它时立刻变红。
   const weeklySetsRemainingByPattern: Record<string, number> = {};
   if (profile.weeklySetsTarget) for (const pattern of [...primary, ...useSecondary]) weeklySetsRemainingByPattern[pattern] = Math.max(0, profile.weeklySetsTarget.value - (input.movementPatternLoads[pattern]?.last7Days.workingSets ?? 0));
   reasons.push({ type: "time", reason: `Session limited to ${input.durationMinutes} minutes with a ${workingSetCap}-set working cap; rest assumptions are retained.`, ruleId: profile.durationPolicyRuleId });

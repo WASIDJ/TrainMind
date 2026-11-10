@@ -149,3 +149,20 @@ test("酸痛真的影响排课：腿酸时不排腿/臀/小腿，且对照组不
   const controlNames = control.workout!.exercises.map(x => x.name);
   assert.ok(controlNames.some(n => /深蹲/.test(n)), "不酸的用户不该被误伤");
 });
+
+// 2026-11-10 冻结：周容量目标（hypertrophy 的"每模式 10 组/周"）只计算、不参与排课。
+// 为什么冻结：出处（ACSM 2026 Overview of Reviews）按"肌群/全身周容量"表述，代码按【动作模式】扣减，
+// 单位对不上（腿部三模式各 10 组 = 腿一周 30 组）；而真正管排课的是肌群级两条硬规则
+// （24 小时内不重复、每周 2–3 次）。两套单位同时生效，用户问"为什么今天不让我练腿"就答不清。
+// 这条护栏的作用：谁把该字段接进排课（core.ts 读它），测试立刻红，而不是等半年后发现剂量被一条错配口径改过。
+test("周容量目标保持冻结：只计算、不参与排课", async () => {
+  const coreSource = await readFile(new URL("../src/core.ts", import.meta.url), "utf8");
+  assert.ok(!coreSource.includes("weeklySetsRemainingByPattern"), "core.ts 不该读 weeklySetsRemainingByPattern —— 它是冻结字段");
+  assert.ok(!coreSource.includes("acsm-hypertrophy-weekly-volume-2026"), "core.ts 不该应用周容量规则");
+
+  // 字段本身仍然算（保留事实，只是不用），且规则声明也保留（改声明会牵动既有断言，属独立的一项清理）
+  const result = await createWorkout("我在Test Gym，有45分钟，中级，想增肌。", "knowledge-frozen-weekly", new RuleLanguageModelProvider());
+  const stimulus = result.workout!.requiredStimulus!;
+  assert.ok(stimulus.weeklySetsRemainingByPattern, "字段仍要算出来");
+  assert.ok(Object.values(stimulus.weeklySetsRemainingByPattern).every(v => v >= 0), "剩余量不该出现负数");
+});
