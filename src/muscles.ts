@@ -60,6 +60,8 @@ export interface MuscleLedgerEntry {
   lastTrainedAt: string | null;
   hoursSince: number | null;
   recoveryHours: number;
+  /** 0–100 的恢复度（已过时间 / 恢复窗口）。没有记录为 null —— 不假装 0% */
+  recoveryPercent: number | null;
   state: MuscleState;
   /** 一句可直接给用户看的话 */
   text: string;
@@ -114,7 +116,7 @@ export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] 
     if (!row || !row.last) {
       return {
         group: meta.key, label: meta.label, sets7d: 0, sets28d: 0, measuredSets7d: 0, assumedSets7d: 0,
-        lastTrainedAt: null, hoursSince: null, recoveryHours: meta.recoveryHours, state: "no_record" as const,
+        lastTrainedAt: null, hoursSince: null, recoveryHours: meta.recoveryHours, recoveryPercent: null, state: "no_record" as const,
         text: `${meta.label}：还没有记录`,
       };
     }
@@ -122,6 +124,8 @@ export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] 
     // 训练量越大，恢复窗口越久：近 7 天每多 3 组，多给 25% 窗口（上限 1.5 倍）
     const window = Math.round(meta.recoveryHours * Math.min(1.5, 1 + Math.max(0, row.sets7d - 3) / 12));
     const days = hours / 24;
+    // 恢复度百分比（2026-11-10）：用于"它越来越懂你"的可感知表达；被落下仍单独标记
+    const recoveryPercent = Math.max(0, Math.min(100, Math.round((hours / window) * 100)));
     let state: MuscleState;
     let text: string;
     if (days >= NEGLECT_DAYS) {
@@ -129,19 +133,19 @@ export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] 
       text = `${meta.label}：${Math.floor(days)} 天没练了`;
     } else if (hours >= window) {
       state = "recovered";
-      text = `${meta.label}：已恢复（${Math.round(hours)} 小时前练过）`;
+      text = `${meta.label}：已恢复 100%（${Math.round(hours)} 小时前练过）`;
     } else if (hours >= window / 2) {
       state = "recovering";
-      text = `${meta.label}：恢复中，还需约 ${Math.max(1, Math.round(window - hours))} 小时`;
+      text = `${meta.label}：恢复中 ${recoveryPercent}%，还需约 ${Math.max(1, Math.round(window - hours))} 小时`;
     } else {
       state = "just_trained";
-      text = `${meta.label}：刚练过（${Math.max(1, Math.round(hours))} 小时前）`;
+      text = `${meta.label}：刚练过 ${recoveryPercent}%（${Math.max(1, Math.round(hours))} 小时前）`;
     }
     return {
       group: meta.key, label: meta.label, sets7d: row.sets7d, sets28d: row.sets28d,
       measuredSets7d: row.measured7d, assumedSets7d: row.assumed7d,
       lastTrainedAt: new Date(row.last).toISOString(), hoursSince: Math.round(hours),
-      recoveryHours: window, state, text,
+      recoveryHours: window, recoveryPercent, state, text,
     };
   });
 }

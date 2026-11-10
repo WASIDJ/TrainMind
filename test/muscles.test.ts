@@ -87,3 +87,30 @@ test("肌群：未来时间戳（时钟漂移）不计入，也不报错", () =>
   ]});
   assert.equal(entries.find(x => x.group === "chest")!.state, "no_record");
 });
+
+test("恢复度：0–100 百分比，边界与无记录", () => {
+  const fresh = buildMuscleLedger({ now: NOW, musclesByExercise: muscles, sets: [] }).find(x => x.group === "chest")!;
+  assert.equal(fresh.recoveryPercent, null, "没有记录不能假装 0%");
+
+  // 胸窗口 48h：24h 前 → 50%
+  const half = buildMuscleLedger({ now: NOW, musclesByExercise: muscles, sets: [
+    { exerciseId: "push-up", completedAt: at(24), actualRepsSource: "counted" },
+  ]}).find(x => x.group === "chest")!;
+  assert.ok(Math.abs((half.recoveryPercent ?? 0) - 50) <= 3, `期望约 50%，实际 ${half.recoveryPercent}`);
+  assert.equal(half.state, "recovering");
+
+  // 超窗 → 100%，状态仍是已恢复
+  const full = buildMuscleLedger({ now: NOW, musclesByExercise: muscles, sets: [
+    { exerciseId: "push-up", completedAt: at(72), actualRepsSource: "counted" },
+  ]}).find(x => x.group === "chest")!;
+  assert.equal(full.recoveryPercent, 100);
+  assert.equal(full.state, "recovered");
+});
+
+test("恢复度：很久没练仍单独标记，不并入 100%", () => {
+  const old = buildMuscleLedger({ now: NOW, musclesByExercise: muscles, sets: [
+    { exerciseId: "lat-pulldown-ex", completedAt: at(24 * 20), actualRepsSource: "counted" },
+  ]}).find(x => x.group === "back")!;
+  assert.equal(old.state, "neglected");
+  assert.equal(old.recoveryPercent, 100, "数值上是 100%，但状态仍是久未训练");
+});
