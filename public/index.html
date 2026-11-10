@@ -723,7 +723,7 @@ async function trainingHub(showOverview=false){
   const page=pageGeneration;
   if(!workout){try{const {workout:active}=await api(`/api/workouts/active?userId=${encodeURIComponent(userId)}`);if(page!==pageGeneration)return;setWorkout(active)}catch{if(page!==pageGeneration)return}}
   if(!showOverview&&workout&&['preview','warming_up','exercise_active','set_feedback','resting','paused','cooling_down'].includes(workout.status))return render();
-  app.innerHTML='<section class="tm-screen course-screen"><header class="tm-header"><div class="eyebrow">我的课程</div><h1>按你的节奏练</h1><p>练一场，格子就亮一格。</p></header><div class="tm-stack"><div id="saved-workout"></div><div id="program-card"><div class="tm-empty">正在读取课程…</div></div><div id="checkin"></div></div></section>';
+  app.innerHTML='<section class="tm-screen course-screen"><header class="tm-header"><div class="eyebrow">我的课程</div><h1>按你的节奏练</h1><p>沿着路线，一场一场走向更好的自己。</p></header><div class="tm-stack"><div id="saved-workout"></div><div id="program-card"><div class="tm-empty">正在读取课程…</div></div><div id="checkin"></div></div></section>';
   updateContinueCard();loadProgram();
 }
 // 多周课程:计划(模板)与执行(真实训练)分离,进度只认完成的场次
@@ -743,15 +743,32 @@ async function loadProgram(){
     }
     const st=d.status,done=new Map((d.program.completions||[]).map(c=>[c.programSessionId,c.completedAt])),byWeek={};
     (d.program.sessions||[]).forEach(s=>{(byWeek[s.weekNumber]=byWeek[s.weekNumber]||[]).push(s)});
+    let sessionIndex=0;
+    const icon=kind=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+({done:'<path d="m5 12 4 4L19 6"/>',next:'<path d="m9 5 10 7-10 7z" fill="currentColor" stroke="none"/>',locked:'<rect x="6" y="10" width="12" height="10" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',flag:'<path d="M5 21V3m0 1c5-4 9 4 14 0v10c-5 4-9-4-14 0"/>'})[kind]+'</svg>';
     const path=Object.keys(byWeek).sort((a,b)=>a-b).map(w=>{
       const meta=(d.program.weeks||[]).find(x=>x.weekNumber===+w)||{};
-      const nodes=byWeek[w].map(s=>{
-        const isDone=done.has(s.id),isNext=!!st.nextSession&&st.nextSession.id===s.id;
-        return '<div class="path-node" style="display:flex;align-items:center;gap:10px;padding:7px 0;opacity:'+(isDone||isNext?1:.5)+'"><span style="width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;background:'+(isDone?'var(--lime,#c8f560)':isNext?'var(--peach,#ffd9c9)':'transparent')+';border:1px solid rgba(0,0,0,.18)">'+(isDone?'✓':isNext?'●':'○')+'</span><span style="flex:1">'+esc(s.title)+'</span>'+(isDone?'<small style="opacity:.6">'+new Date(done.get(s.id)).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'})+'</small>':'')+'</div>';
+      const sessions=byWeek[w],height=sessions.length*134+40;
+      const points=sessions.map((s,i)=>({x:150+72*Math.sin((sessionIndex+i)*Math.PI/2),y:64+i*134}));
+      const segments=points.slice(1).map((p,i)=>{
+        const prev=points[i],middle=(prev.y+p.y)/2;
+        const line='M '+prev.x+' '+prev.y+' C '+prev.x+' '+middle+' '+p.x+' '+middle+' '+p.x+' '+p.y;
+        return '<path d="'+line+'" class="course-trail-base"/>'+(done.has(sessions[i+1].id)||st.nextSession?.id===sessions[i+1].id?'<path d="'+line+'" class="course-trail-done"/>':'');
       }).join('');
-      return '<section style="padding:10px 0;border-top:1px solid rgba(0,0,0,.07)"><strong>第 '+w+' 周 · '+esc(meta.title||'')+'</strong><p class="home-suggestion" style="margin:2px 0 6px">'+esc(meta.focus||'')+'</p>'+nodes+'</section>';
+      const nodes=sessions.map((s,i)=>{
+        const isDone=done.has(s.id),isNext=st.nextSession?.id===s.id,state=isDone?'done':isNext?'next':'locked',point=points[i];
+        const label=isDone?'已完成':isNext?'从这里继续':'待解锁';
+        const date=isDone?new Date(done.get(s.id)).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'})+' 完成':label;
+        return '<div class="course-stop course-stop-'+state+'" style="--stop-x:'+point.x/3+'%;--stop-y:'+point.y+'px">'+(isNext?'<span class="course-here">下一场</span>':'')+
+          (isNext?'<button id="start-program" class="course-level" aria-label="开始 '+esc(s.title)+'" aria-current="step">':'<div class="course-level" role="img" aria-label="'+esc(s.title)+'，'+label+'">')+icon(state)+(isNext?'</button>':'</div>')+
+          '<span class="course-stop-title">第 '+s.sessionNumber+' 场</span><small>'+esc(date)+'</small></div>';
+      }).join('');
+      sessionIndex+=sessions.length;
+      const complete=sessions.every(s=>done.has(s.id)),current=sessions.some(s=>s.id===st.nextSession?.id);
+      return '<section class="course-region'+(current?' is-current':'')+'" aria-label="第 '+w+' 周">'+
+        '<header class="course-region-heading"><span class="course-week-number">'+String(w).padStart(2,'0')+'</span><div><span class="eyebrow">第 '+w+' 周'+(complete?' · 已走过':current?' · 正在探索':' · 前方旅程')+'</span><h2>'+esc(meta.title||'继续前进')+'</h2><p>'+esc(meta.focus||'按自己的节奏练')+'</p></div>'+icon('flag')+'</header>'+
+        '<div class="course-landscape" style="height:'+height+'px"><svg class="course-trail" viewBox="0 0 300 '+height+'" preserveAspectRatio="none" aria-hidden="true">'+segments+'</svg><span class="course-landmark" aria-hidden="true">'+icon('flag')+'</span>'+nodes+'</div></section>';
     }).join('');
-    host.innerHTML='<div class="tm-note lavender"><strong>'+esc(st.text)+'</strong><p>'+esc(d.program.title)+'</p>'+(st.nextSession?'<button id="start-program" style="margin-top:8px;width:100%">开始「'+esc(st.nextSession.title)+'」</button>':'<p>这门课程已经走完了，可以再开一门。</p>')+'</div><div class="tm-note"><strong>课程路径</strong>'+path+'</div>';
+    host.innerHTML='<div class="course-map-summary"><div><span class="eyebrow">你的训练旅程</span><h2>'+esc(d.program.title)+'</h2><p>'+esc(st.text)+'</p></div><span class="course-map-count"><b>'+st.completedSessions+'</b> / '+st.totalSessions+' 场</span><progress value="'+st.completedSessions+'" max="'+Math.max(1,st.totalSessions)+'" aria-label="课程已完成场次"></progress></div><div class="course-map" aria-label="课程关卡地图">'+path+'<div class="course-destination'+(!st.nextSession?' is-complete':'')+'">'+icon('flag')+'<strong>'+(!st.nextSession?'这段旅程，完成了':'终点 · 更进一步')+'</strong><p>'+(!st.nextSession?'每一场训练，都留下了你的足迹。':'每走一步，都是自己的积累。')+'</p></div></div>';
     renderCheckin();
     const start=host.querySelector('#start-program');
     if(start)start.onclick=async()=>{
