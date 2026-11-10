@@ -42,6 +42,8 @@ function home(intent=false){
   root.querySelector('#mic').onclick=()=>{if(coachBusy)return;toggleListening();syncHomeConversation()};
   root.querySelector('#new-home-chat').onclick=()=>{homeConversationId=crypto.randomUUID();home()};
   root.querySelector('#chat-history-open').onclick=()=>showHomeHistory(root);
+  // 2026-11-09：右上角'新建对话'之前只画了图标没接事件（点了没反应）
+  {const nb=root.querySelector('#new-home-chat');if(nb)nb.onclick=()=>{saveHomeConversation();homeConversationId=crypto.randomUUID();coachHistory=[];coachProposal=null;coachError=null;home()}};
   root.querySelector('#close-home-history').onclick=()=>root.querySelector('dialog').close();
   let alternate=false;
   const suggestions=[
