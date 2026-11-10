@@ -11,7 +11,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createWorkout, RuleLanguageModelProvider, type SetRecord, type WorkoutSession } from "../src/core.ts";
-import { buildMuscleLedger, WEEKLY_FREQUENCY_TARGET } from "../src/muscles.ts";
+import { buildMuscleLedger, MIN_SAME_MUSCLE_INTERVAL_HOURS, MIN_SAME_MUSCLE_INTERVAL_RULE_ID, WEEKLY_FREQUENCY_TARGET } from "../src/muscles.ts";
 
 const DAY = 86_400_000;
 const FIXTURE_USER = "recovery-frequency-fixture";
@@ -99,11 +99,22 @@ test("频次：状态分档与目标区间（靶区间 = 2–3 次）", () => {
   assert.equal(run(2).frequencyStatus, "in_range");
   assert.equal(run(3).frequencyStatus, "in_range");
   assert.equal(run(4).frequencyStatus, "above");
-  // 按小时的辅助提示仍在（没有被删掉，只是不再当主约束）
+  // 按小时的恢复度仍在（展示层继续用），但"能不能再练"由 24 小时硬线决定
   assert.ok(run(1).recoveryPercent !== null);
+  assert.equal(MIN_SAME_MUSCLE_INTERVAL_HOURS, 24);
+  // 24 小时是含等边界：正好 24h 之前算"够了"，23h 之前算"太近"
+  assert.equal(run(1).intervalStatus, "ok");
+  assert.equal(buildMuscleLedger({
+    now, musclesByExercise: { "bodyweight-squat": ["legs"] },
+    sets: [{ exerciseId: "bodyweight-squat", sessionId: "s-23h", completedAt: new Date(now - 23 * 3_600_000).toISOString() }],
+  }).find(x => x.group === "legs")!.intervalStatus, "too_soon");
+  assert.equal(buildMuscleLedger({
+    now, musclesByExercise: { "bodyweight-squat": ["legs"] },
+    sets: [{ exerciseId: "bodyweight-squat", sessionId: "s-late", completedAt: new Date(now - 30 * 3_600_000).toISOString() }],
+  }).find(x => x.group === "legs")!.intervalStatus, "ok");
 });
 
-// ── 三、排课：主约束是周频次，小时数只是提示 ─────────────────────────────
+// ── 三、排课：周频次是主约束（>3 次/周收手），24 小时是力量动作的硬底线 ──────────
 test("频次：同一肌群本周 4 次后不再加量（其余部位照常）", async () => {
   // 四场腿部训练，覆盖腿/臀/小腿三个部位（同一场里各部位都练到，各算一次）
   const legSession = [{ exerciseId: "bodyweight-squat" }, { exerciseId: "hip-hinge" }, { exerciseId: "glute-bridge" }, { exerciseId: "bodyweight-calf-raise" }];
@@ -117,11 +128,32 @@ test("频次：同一肌群本周 4 次后不再加量（其余部位照常）",
   assert.ok(overTrained.prescription.decisionReasons.some(x => x.ruleId === WEEKLY_FREQUENCY_TARGET.ruleId), "收手要有可解释的理由");
 });
 
-test("频次：不到 48 小时但本周只练了 1 次，仍然照安排（小时不再是主约束）", async () => {
+// 24 小时硬线（2026-11-10，owner 授权并按文献定）：同一部位刚练完不排力量动作。
+// 依据 MacDougall 1995 的 MPS 时程（24h 仍在峰值、36h 回基线），见 docs/EVIDENCE-RECOVERY.md 第 6 条。
+// 注意：这条替换了本人当天早些时候写的"不到 48 小时仍照安排"——那是按旧口径（小时只作提示）写的，
+// 现在规则反过来，属于需求变更，不是"改断言迁就代码"。
+test("间隔：24 小时内练过的部位不再排力量动作，但低强度收尾保留", async () => {
   const recent = await plan("我在家，有30分钟，徒手，想练全身。", history([
-    { exerciseId: "bodyweight-squat", daysAgo: 0, sets: 2 }, // 约 8 小时内练过腿
+    // 约 8 小时前的一场腿课，覆盖腿/臀/小腿（三个部位都算"刚练过"）
+    { exerciseId: "bodyweight-squat", daysAgo: 0.33, sets: 2 },
+    { exerciseId: "hip-hinge", daysAgo: 0.33, sets: 2 },
+    { exerciseId: "glute-bridge", daysAgo: 0.33, sets: 2 },
+    { exerciseId: "bodyweight-calf-raise", daysAgo: 0.33, sets: 2 },
   ]));
-  assert.ok(recent.exercises.some(x => x.exerciseId === "bodyweight-squat"), "按小时算腿还在恢复期，但本周只练 1 次——应该照常安排");
+  const ids = recent.exercises.map(x => x.exerciseId);
+  const legStrength = ["bodyweight-squat", "reverse-lunge", "chair-squat", "hip-hinge", "glute-bridge", "bodyweight-good-morning", "bodyweight-calf-raise"];
+  assert.ok(!ids.some(id => legStrength.includes(id)), `8 小时前刚练腿，却又排了腿部力量动作：${ids.join(" / ")}`);
+  assert.ok(ids.includes("march-in-place"), "只拦力量动作：低强度快走应该还在");
+  assert.ok(recent.prescription.decisionReasons.some(x => x.ruleId === MIN_SAME_MUSCLE_INTERVAL_RULE_ID), "硬线要有可解释的理由");
+  assert.ok(recent.prescription.ruleIds.includes(MIN_SAME_MUSCLE_INTERVAL_RULE_ID));
+});
+
+test("间隔：超过 24 小时就恢复正常供应（不作 48 小时的硬拦截）", async () => {
+  const yesterday = await plan("我在家，有30分钟，徒手，想练全身。", history([
+    { exerciseId: "bodyweight-squat", daysAgo: 1.2, sets: 2 }, // 约 29 小时前
+  ]));
+  assert.ok(yesterday.exercises.some(x => x.exerciseId === "bodyweight-squat"), "已过 24 小时，腿应该能排");
+  assert.ok(!yesterday.prescription.decisionReasons.some(x => x.ruleId === MIN_SAME_MUSCLE_INTERVAL_RULE_ID));
 });
 
 test("频次：候选不够 3 个时不强行收手（宁可少避一点，也不能排不出课）", async () => {

@@ -6,7 +6,7 @@ import { relationScore, substitutionGraph } from "../knowledge/substitutions.ts"
 import { getGoalProfile, resolveRequiredStimulus } from "./training-knowledge/resolver.ts";
 import type { DecisionReason, ExperienceLevel, KnowledgeGoal, RequiredStimulus } from "./training-knowledge/types.ts";
 import { buildCapabilityEstimates, compatibleMovementEvidence, type CapabilityEstimates, type ExerciseCapabilityEstimate, type MovementCapabilityEstimate } from "./user-training-model/capability.ts";
-import { buildMuscleLedger, canonicalMuscle, WEEKLY_FREQUENCY_TARGET, type MuscleGroup } from "./muscles.ts";
+import { buildMuscleLedger, canonicalMuscle, MIN_SAME_MUSCLE_INTERVAL_HOURS, MIN_SAME_MUSCLE_INTERVAL_RULE_ID, WEEKLY_FREQUENCY_TARGET, type MuscleGroup } from "./muscles.ts";
 
 export type Environment = "home" | "office" | "gym";
 export type Intensity = "low" | "moderate" | "high";
@@ -422,12 +422,16 @@ export function generateWorkout(context: SessionContext, facts: TrainingFacts = 
     musclesByExercise: primaryMusclesByExerciseId,
   }) : [];
   const overFrequency = new Set<MuscleGroup>(frequencyLedger.filter(x => x.frequencyStatus === "above").map(x => x.group));
-  const blockedMuscle = (muscle: string) => bannedMuscles.has(muscle) || overFrequency.has(canonicalMuscle(muscle) as MuscleGroup);
+  // 24 小时硬线（2026-11-10，依据 MacDougall 1995 的 MPS 时程）：同一部位刚练完不排力量动作。
+  // 只拦力量动作——低强度收尾（快走/活动度）照旧保留，见下面 timedPlan 那段。
+  const tooSoon = new Set<MuscleGroup>(frequencyLedger.filter(x => x.intervalStatus === "too_soon").map(x => x.group));
+  const blockedMuscle = (muscle: string) => bannedMuscles.has(muscle) || overFrequency.has(canonicalMuscle(muscle) as MuscleGroup) || tooSoon.has(canonicalMuscle(muscle) as MuscleGroup);
   const blockedExercise = (exercise: Exercise) => exercise.primaryMuscles.some(blockedMuscle);
   let frequencyHold = new Set<MuscleGroup>(); // 实际生效的"本周次数已到上限"部位（候选够 3 个才生效）
-  if (bannedMuscles.size || overFrequency.size) {
+  let intervalHold = new Set<MuscleGroup>(); // 实际生效的"24 小时内刚练过"部位
+  if (bannedMuscles.size || overFrequency.size || tooSoon.size) {
     const withoutBlocked = candidates.filter(exercise => !blockedExercise(exercise));
-    if (withoutBlocked.length >= 3) { candidates = withoutBlocked; frequencyHold = overFrequency; }
+    if (withoutBlocked.length >= 3) { candidates = withoutBlocked; frequencyHold = overFrequency; intervalHold = tooSoon; }
   }
   const selected = new Set<string>();
   const rank = (x: Exercise) => (model.exerciseCapabilities[x.id]?.recentPainEvent ? 1000 : 0) + (model.preferenceProfile.byExercise[x.id]?.skipCount ?? 0) * 10 + (model.preferenceProfile.byExercise[x.id]?.replaceCount ?? 0) * 5 + (model.preferenceProfile.byExercise[x.id]?.tooHardCount ?? 0) * 8 - Math.min(30, (model.preferenceProfile.byExercise[x.id]?.tooLightCount ?? 0) * 6);
@@ -522,8 +526,9 @@ export function generateWorkout(context: SessionContext, facts: TrainingFacts = 
   if (items.some(x => x.recommendation.progressionStep)) decisionReasons.push({ type: "progression", reason: "Recent completed sets support a small, explainable load or repetition progression.", ruleId: "history-progression-v1" });
   if (items.some(x => x.recommendation.action === "regress" || x.recommendation.action === "reduce_volume")) decisionReasons.push({ type: "regression", reason: "Recent difficult or incomplete work, fatigue, or high pattern volume limited this session's dose.", ruleId: "history-progression-v1" });
   if (frequencyHold.size) decisionReasons.push({ type: "recovery", reason: `Weekly frequency is already at the ${WEEKLY_FREQUENCY_TARGET.min}–${WEEKLY_FREQUENCY_TARGET.max}x target for ${[...frequencyHold].join(", ")}; this week no extra volume is added to those muscles.`, ruleId: WEEKLY_FREQUENCY_TARGET.ruleId });
+  if (intervalHold.size) decisionReasons.push({ type: "recovery", reason: `${[...intervalHold].join(", ")} were trained within the last ${MIN_SAME_MUSCLE_INTERVAL_HOURS} hours; muscle protein synthesis is still elevated, so no strength work for those muscles today (low-intensity movement is still allowed).`, ruleId: MIN_SAME_MUSCLE_INTERVAL_RULE_ID });
   const legacyRuleIds = ["session_movement_coverage_v0", "target_rir_v0", "set_range_v0", "progression_requires_history_v0", "duration_recipe_v0"];
-  const prescription: Prescription = { goal, workingSets, maxWorkingSets, availableDurationMinutes: available, plannedDurationMinutes: planned, optionalDurationMinutes: optional, movementPatterns: patterns, reasoningSummary, ruleIds: [...new Set([...legacyRuleIds, ...stimulus.ruleIds, ...(frequencyHold.size ? [WEEKLY_FREQUENCY_TARGET.ruleId] : [])])], decisionReasons };
+  const prescription: Prescription = { goal, workingSets, maxWorkingSets, availableDurationMinutes: available, plannedDurationMinutes: planned, optionalDurationMinutes: optional, movementPatterns: patterns, reasoningSummary, ruleIds: [...new Set([...legacyRuleIds, ...stimulus.ruleIds, ...(frequencyHold.size ? [WEEKLY_FREQUENCY_TARGET.ruleId] : []), ...(intervalHold.size ? [MIN_SAME_MUSCLE_INTERVAL_RULE_ID] : [])])], decisionReasons };
   return { schemaVersion: "1.2", sessionId: randomUUID(), userId: context.userId, createdAt: new Date().toISOString(), durationMinutes: available, availableDurationMinutes: available, durationIntent, plannedDurationMinutes: planned, optionalDurationMinutes: optional, goal, environment: context.environment, gymId: context.gymId, restrictions: context.restrictions, intensity: context.intensityPreference ?? (stimulus.goal === "recovery" || stimulus.goal === "mobility" || ["fatigued", "very_fatigued"].includes(context.recoveryState) ? "low" : "moderate"), status: "preview", warmupMinutes, exercises: items, blocks, prescription, requiredStimulus: stimulus, prescriptionDiagnostics: { totalWorkingSets: workingSets, movementPatternSets: patternSets, blockDuration }, cooldownMinutes, safetyNotes: context.soreness.length ? [`检测到${context.soreness.map(x => ({ chest: "胸", shoulder: "肩", lower_back: "腰背", legs: "腿", unknown: "" } as Record<string, string>)[x] ?? x).join("、")}部酸痛，今天会控制相关部位的强度，训练中如出现疼痛请立即停止。`] : [], estimatedDurationMinutes: planned, durationBreakdown: breakdown, durationShortfallReason: planned > available ? "最低安全处方超过可用时间。" : context.durationIntent === "target" && available - planned > 3 ? "当前动作库无法安全填满目标时长。" : undefined, runtime: { currentExerciseIndex: 0, currentSetNumber: 1, activeWorkoutMs: 0, events: [] } };
 }
 

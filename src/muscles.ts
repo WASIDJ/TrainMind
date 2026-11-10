@@ -64,6 +64,27 @@ export const WEEKLY_FREQUENCY_TARGET = { min: 2, max: 3, ruleId: "muscle-weekly-
 
 export type FrequencyStatus = "none" | "below" | "in_range" | "above";
 
+// 同一部位两次【力量】训练之间的最短间隔：24 小时。
+//
+// 出处（Europe PMC 2026-11-10 核实，见 docs/EVIDENCE-RECOVERY.md 第 6、7 条）：
+//   MacDougall JD, et al. The time course for elevated muscle protein synthesis following heavy
+//   resistance exercise. Can J Appl Physiol. 1995. DOI 10.1139/h95-038
+//   → 一次高强度后 MPS +50%(4h)、+109%(24h)，36h 基本回到基线。24h 还在峰值 = 修复没完成。
+//   深蹲 5x5@80%1RM 后膝伸肌力量与纵跳下降持续到 +72h（女性更久）。DOI 10.3389/fphys.2018.01480
+//   练到力竭会进一步延长恢复，24–48h 才回来。DOI 10.1007/s00421-017-3725-7
+//
+// 边界：这些证据针对的是"同一部位再做高强度"，不是"动一动也不行"。所以只拦力量动作，
+// 低强度活动（快走、活动度）照旧保留——与酸痛处理同一条口径。
+// 另外"糖原要 24–48h 才恢复"这个常见说法不成立：高强度后糖原合成速率 15–33 mmol/kg/h，
+// 远快于长时间有氧（1996 综述 DOI 10.2165/00007256-199621020-00003），不能拿它当拦截依据。
+export const MIN_SAME_MUSCLE_INTERVAL_HOURS = 24;
+export const MIN_SAME_MUSCLE_INTERVAL_RULE_ID = "muscle-min-interval-24h-v1";
+
+// 备注：神经肌肉功能要 48–72h 才完全回来（DOI 10.3389/fphys.2018.01480），
+// 所以 24h 只是"不再硬塞"的下限，不是"练了就够"的标准。展示层因此仍保留"建议明天"这类措辞。
+
+export type IntervalStatus = "none" | "too_soon" | "ok";
+
 export interface MuscleLedgerEntry {
   group: MuscleGroup;
   label: string;
@@ -86,6 +107,8 @@ export interface MuscleLedgerEntry {
   frequencyStatus: FrequencyStatus;
   /** 一句可直接给用户看的频次说明（主口径） */
   frequencyText: string;
+  /** 距上次训练的小时间隔够不够做【力量】训练（24h 硬线，依据 MPS 时程） */
+  intervalStatus: IntervalStatus;
 }
 
 export interface LedgerSet {
@@ -144,6 +167,7 @@ export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] 
         lastTrainedAt: null, hoursSince: null, recoveryHours: meta.recoveryHours, recoveryPercent: null, state: "no_record" as const,
         text: `${meta.label}：还没有记录`,
         sessions7d: 0, frequencyStatus: "none" as const, frequencyText: `${meta.label}：本周还没练`,
+        intervalStatus: "none" as const,
       };
     }
     const hours = (now - row.last) / 3_600_000;
@@ -168,6 +192,7 @@ export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] 
       text = `${meta.label}：今天刚练过 · 建议明天`;
     }
     const sessions7d = row.sessions.size;
+    const intervalStatus: IntervalStatus = hours < MIN_SAME_MUSCLE_INTERVAL_HOURS ? "too_soon" : "ok";
     const frequencyStatus: FrequencyStatus = sessions7d === 0 ? "none" : sessions7d < WEEKLY_FREQUENCY_TARGET.min ? "below" : sessions7d <= WEEKLY_FREQUENCY_TARGET.max ? "in_range" : "above";
     const frequencyText = frequencyStatus === "none" ? `${meta.label}：本周还没练`
       : frequencyStatus === "below" ? `${meta.label}：本周 ${sessions7d} 次（建议每周 ${WEEKLY_FREQUENCY_TARGET.min}–${WEEKLY_FREQUENCY_TARGET.max} 次）`
@@ -178,7 +203,7 @@ export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] 
       measuredSets7d: row.measured7d, assumedSets7d: row.assumed7d,
       lastTrainedAt: new Date(row.last).toISOString(), hoursSince: Math.round(hours),
       recoveryHours: window, recoveryPercent, state, text,
-      sessions7d, frequencyStatus, frequencyText,
+      sessions7d, frequencyStatus, frequencyText, intervalStatus,
     };
   });
 }
