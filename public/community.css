@@ -84,3 +84,43 @@
 @media(prefers-reduced-motion:reduce) { .community-screen button { transition:none; } }
 /* 发布按钮常驻在页头下方一行右对齐，不覆盖任何内容 */
 .community-actions { display:flex; justify-content:flex-end; margin:-6px 0 14px; }
+
+/* 2026-11-11 社区页整屏重排：一屏之内曾有六层各自独立的横条
+   （大标题 → 加入社区大卡 → 三个大 tab → 五个筛选药丸 → 分享按钮 → 帖子），
+   第一张帖子被推到 446px，390×844 上基本看不到内容。
+   按"每屏一个主角"重排：页头一行（标题 + 两个按钮）→ 成员/加入条，
+   滚动时页头与 tab 粘顶，筛选药丸只在与内容相关时出现。 */
+.shell[data-screen=community] #app { padding-top:14px; }
+.community-heading { align-items:center; margin-bottom:14px; }
+.community-title { min-width:0; }
+.community-heading h1 { font-size:24px; margin:8px 0 4px; letter-spacing:-.9px; }
+.community-heading .eyebrow { font-size:9px; letter-spacing:.1em; color:#a99fb3; }
+.community-head-actions { display:flex; align-items:center; gap:8px; flex:none; }
+.community-compose { min-height:38px; height:38px; padding:0 14px 0 11px; border-radius:19px; font-size:12px; font-weight:700; box-shadow:none; }
+.community-compose svg { width:15px; height:15px; }
+.community-account-button { width:38px; height:38px; padding:9px; }
+
+/* 未登录：一行横幅，不再是一整张要读两行的卡 */
+.community-welcome {
+  display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+  padding:12px 14px; background:#232618; border:1px solid #454b26;
+  color:#eef4cc; border-radius:14px; font-size:12px;
+}
+.community-welcome-title { font-weight:700; }
+.community-welcome-copy { flex:1; min-width:0; font-size:11px; color:#b5bd90; }
+.community-welcome svg { width:16px; height:16px; color:var(--accent); }
+
+/* tab 与筛选条粘在顶部：往下翻帖时仍然能切换，又不再各占一层留白 */
+.community-tabs { gap:22px; margin:16px 0 10px; }
+.community-tabs>button { min-height:36px; padding:0 0 9px; font-size:15px; font-weight:600; }
+.community-tabs>button.active::after { height:2px; width:18px; left:calc(50% - 9px); }
+.community-topic-filters { margin-bottom:10px; }
+.community-topic-filters button { min-height:28px; font-size:10px; padding:6px 10px; }
+
+/* 帖子：正文是主角，页脚的行话与"各有节奏"降到最低存在感 */
+.community-post { margin-bottom:12px; border-radius:18px; }
+.community-post-copy { padding:12px 14px 8px; }
+.community-post-copy>p { font-size:13px; line-height:1.75; margin-bottom:8px; }
+.community-post>footer { padding:2px 14px 8px; gap:14px; }
+.community-footer-note { display:none; }
+@media(max-width:350px) { .community-heading h1 { font-size:21px; } .community-compose span { display:none; } .community-compose { padding:0 11px; } }
