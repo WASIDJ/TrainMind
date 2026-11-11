@@ -106,3 +106,56 @@ test("D26: 普通闲聊不触发编排(不许把聊天都当成要建课)", { ti
     assert.notEqual(r.body.mode, "program_proposal");
   } finally { await s.close(); }
 });
+
+// 2026-11-11 审查发现的死循环：用户说"去健身房"后，我们回问"在家还是去健身房？有哑铃吗"，
+// 用户答"健身房"→ 同一句再问一遍，永远收不到 equipment。产品上"不猜器械"仍然成立，
+// 但提问必须能往前走：按环境给出可选的答案词，并认出"器械都有"这类明确授权。
+test("D26: 答'健身房'不能把同一句问题再问一遍，且最终能收齐器械", { timeout: 40000 }, async () => {
+  const s = await startServer();
+  try {
+    const first = await s.coach({ message: "帮我安排 8 周，每周 3 次，去健身房" });
+    assert.equal(first.body.programProposal, null, "没说器械就不给 proposal");
+    assert.deepEqual(first.body.programSlotsMissing, ["equipment"]);
+    const firstReply = String(first.body.reply);
+    assert.match(firstReply, /哑铃|自重/, `第一问要给出可回答的词：${firstReply}`);
+
+    const second = await s.coach({
+      message: "健身房",
+      history: [
+        { role: "user", content: "帮我安排 8 周，每周 3 次，去健身房" },
+        { role: "assistant", content: firstReply },
+      ],
+    });
+    const secondReply = String(second.body.reply);
+    assert.notEqual(secondReply, firstReply, "不许把同一句问题原样再问一遍");
+    assert.deepEqual(second.body.programSlotsMissing, ["equipment"], "确实还缺器械");
+    assert.match(secondReply, /哑铃|弹力带|自重/, `第二问要给出明确选项：${secondReply}`);
+
+    const third = await s.coach({
+      message: "哑铃",
+      history: [
+        { role: "user", content: "帮我安排 8 周，每周 3 次，去健身房" },
+        { role: "assistant", content: firstReply },
+        { role: "user", content: "健身房" },
+        { role: "assistant", content: secondReply },
+      ],
+    });
+    const proposal = third.body.programProposal as Record<string, unknown>;
+    assert.ok(proposal, `答出器械后必须给 proposal：${JSON.stringify(third.body)}`);
+    assert.deepEqual(proposal.equipment, ["dumbbell"]);
+    assert.equal(proposal.environment, "gym");
+    assert.equal(proposal.weeks, 8);
+    assert.equal(proposal.sessionsPerWeek, 3);
+  } finally { await s.close(); }
+});
+
+test("D26: 用户明确说'器械都有'时按健身房器械排，不算替他猜", { timeout: 40000 }, async () => {
+  const s = await startServer();
+  try {
+    const r = await s.coach({ message: "帮我安排 6 周，每周 2 次，去健身房，器械都有" });
+    const proposal = r.body.programProposal as Record<string, unknown>;
+    assert.ok(proposal, `明确授权器械后应当直接给 proposal：${JSON.stringify(r.body)}`);
+    assert.deepEqual(proposal.equipment, ["dumbbell"]);
+    assert.equal(proposal.environment, "gym");
+  } finally { await s.close(); }
+});

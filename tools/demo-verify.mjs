@@ -96,7 +96,11 @@ async function step(id, reps = 10) {
   try {
     const { execSync } = await import("node:child_process");
     const fs = await import("node:fs");
-    const out = `${process.env.PI_SCRATCH_DIR}/asr-test.wav`;
+    // 2026-11-11 审查：原来写死 $PI_SCRATCH_DIR，环境没设时拼成 "undefined/asr-test.wav"，
+    // `say` 必然失败 —— 演示时这一项永远是红的，还会被误读成"识别坏了"。退回系统临时目录。
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const out = path.join(process.env.PI_SCRATCH_DIR || os.tmpdir(), "asr-test.wav");
     execSync(`say -v Tingting -o "${out}" --data-format=LEI16@16000 "我做完了十次"`, { stdio: "ignore" });
     const buf = fs.readFileSync(out);
     const res = await fetch(`${BASE}/api/voice/transcribe`, { method: "POST", headers: { "content-type": "audio/wav" }, body: buf });

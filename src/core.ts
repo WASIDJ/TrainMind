@@ -6,7 +6,7 @@ import { relationScore, substitutionGraph } from "../knowledge/substitutions.ts"
 import { getGoalProfile, resolveRequiredStimulus } from "./training-knowledge/resolver.ts";
 import type { DecisionReason, ExperienceLevel, KnowledgeGoal, RequiredStimulus } from "./training-knowledge/types.ts";
 import { buildCapabilityEstimates, compatibleMovementEvidence, type CapabilityEstimates, type ExerciseCapabilityEstimate, type MovementCapabilityEstimate } from "./user-training-model/capability.ts";
-import { buildMuscleLedger, canonicalMuscle, MIN_SAME_MUSCLE_INTERVAL_HOURS, MIN_SAME_MUSCLE_INTERVAL_RULE_ID, WEEKLY_FREQUENCY_TARGET, type MuscleGroup } from "./muscles.ts";
+import { buildLightExerciseIds, buildMuscleLedger, canonicalMuscle, MIN_SAME_MUSCLE_INTERVAL_HOURS, MIN_SAME_MUSCLE_INTERVAL_RULE_ID, WEEKLY_FREQUENCY_TARGET, type MuscleGroup } from "./muscles.ts";
 
 export type Environment = "home" | "office" | "gym";
 export type Intensity = "low" | "moderate" | "high";
@@ -231,6 +231,27 @@ export function validateStructuredContext(value: any): string[] {
 
 /** B9(2026-11-09):与 workoutJsonSchema 的 minimum/maximum 同源,别在别处硬编码 5/180。 */
 export const DURATION_MIN_MINUTES = 5, DURATION_MAX_MINUTES = 180;
+
+/** 酸痛过滤被短路时的可审计标记（见 generateWorkout 里的 sorenessSkipped）。 */
+export const SORENESS_NOT_APPLIED_RULE_ID = "soreness-not-applied-v1";
+const AREA_LABELS: Record<string, string> = { chest: "胸", shoulder: "肩", lower_back: "腰背", legs: "腿" };
+
+/**
+ * 酸痛提示（2026-11-11 审查修正）。
+ *
+ * 旧实现无条件写"今天会控制相关部位的强度"，但过滤在"候选不足 3 个"时会整体放弃，
+ * 于是出现"一边排深蹲一边说已控制强度"——这句话比不提示更危险，因为它让人以为系统已经处理过。
+ * 现在按实际生效与否分成两种说法，都把"训练中疼痛要停"留着。
+ */
+function sorenessNotes(soreness: string[], skipped: Set<string>): string[] {
+  if (!soreness.length) return [];
+  const label = (area: string) => AREA_LABELS[area] ?? area;
+  const notes: string[] = [];
+  const applied = soreness.filter(area => !skipped.has(area));
+  if (applied.length) notes.push(`检测到${applied.map(label).join("、")}部酸痛，今天会控制相关部位的强度，训练中如出现疼痛请立即停止。`);
+  if (skipped.size) notes.push(`检测到${[...skipped].map(label).join("、")}部酸痛，但没有避开：你在目标里指定了这个部位，可选动作不足 3 个。今天请降到能轻松完成的强度，任何疼痛立刻停止。`);
+  return notes;
+}
 export class ContextInterpreter {
   private primary: LanguageModelProvider;
   private fallback: LanguageModelProvider | null;
@@ -417,9 +438,13 @@ export function generateWorkout(context: SessionContext, facts: TrainingFacts = 
     lower_back: ["back", "erector_spinae", "latissimus_dorsi", "trapezius", "rhomboids"],
   };
   const bannedMuscles = new Set<string>(context.soreness.flatMap(area => soreMuscles[area] ?? []));
+  // 低强度活动（快走/活动度）不算力量训练：它们只进"今天动过"的展示，
+  // 不触发 24h 硬线，也不占每周 2–3 次的名额（2026-11-11 审查修）。
+  const lightExerciseIds = buildLightExerciseIds(exercises);
   const frequencyLedger = facts.sets.length ? buildMuscleLedger({
     sets: facts.sets.map(set => ({ exerciseId: set.exerciseId, completedAt: set.completedAt, sessionId: set.sessionId, actualRepsSource: set.actualRepsSource })),
     musclesByExercise: primaryMusclesByExerciseId,
+    lightExerciseIds,
   }) : [];
   const overFrequency = new Set<MuscleGroup>(frequencyLedger.filter(x => x.frequencyStatus === "above").map(x => x.group));
   // 24 小时硬线（2026-11-10，依据 MacDougall 1995 的 MPS 时程）：同一部位刚练完不排力量动作。
@@ -429,10 +454,20 @@ export function generateWorkout(context: SessionContext, facts: TrainingFacts = 
   const blockedExercise = (exercise: Exercise) => exercise.primaryMuscles.some(blockedMuscle);
   let frequencyHold = new Set<MuscleGroup>(); // 实际生效的"本周次数已到上限"部位（候选够 3 个才生效）
   let intervalHold = new Set<MuscleGroup>(); // 实际生效的"24 小时内刚练过"部位
+  // 只有真的把候选换掉了才算"约束生效"。此前不论是否过滤，safetyNotes 都写
+  // "今天会控制相关部位的强度" —— 于是出现"一边排深蹲一边说已控制强度"的自相矛盾
+  // （2026-11-11 审查）。这里记下实际生效的集合，话术与 ruleId 都按它来。
+  const sorenessBlocked = new Set<string>();
   if (bannedMuscles.size || overFrequency.size || tooSoon.size) {
     const withoutBlocked = candidates.filter(exercise => !blockedExercise(exercise));
-    if (withoutBlocked.length >= 3) { candidates = withoutBlocked; frequencyHold = overFrequency; intervalHold = tooSoon; }
+    if (withoutBlocked.length >= 3) {
+      candidates = withoutBlocked; frequencyHold = overFrequency; intervalHold = tooSoon;
+      for (const muscle of bannedMuscles) sorenessBlocked.add(muscle);
+    }
   }
+  // 报了酸痛但一个候选都排不掉（例如"腿酸 + 要练下肢"）：过滤被短路。
+  // 这时必须如实说明，不能继续宣称"已控制强度"。
+  const sorenessSkipped = new Set<string>(context.soreness.filter(area => (soreMuscles[area] ?? []).length > 0 && !sorenessBlocked.has((soreMuscles[area] ?? [])[0]!)));
   const selected = new Set<string>();
   const rank = (x: Exercise) => (model.exerciseCapabilities[x.id]?.recentPainEvent ? 1000 : 0) + (model.preferenceProfile.byExercise[x.id]?.skipCount ?? 0) * 10 + (model.preferenceProfile.byExercise[x.id]?.replaceCount ?? 0) * 5 + (model.preferenceProfile.byExercise[x.id]?.tooHardCount ?? 0) * 8 - Math.min(30, (model.preferenceProfile.byExercise[x.id]?.tooLightCount ?? 0) * 6);
   const preferredRecipeId = /恢复训练|恢复一下/.test(context.rawInput) ? "recovery" : context.environment === "office" ? "desk_break" : /有氧|心肺|体能/.test(context.rawInput) ? "general_conditioning" : undefined;
@@ -527,9 +562,10 @@ export function generateWorkout(context: SessionContext, facts: TrainingFacts = 
   if (items.some(x => x.recommendation.action === "regress" || x.recommendation.action === "reduce_volume")) decisionReasons.push({ type: "regression", reason: "Recent difficult or incomplete work, fatigue, or high pattern volume limited this session's dose.", ruleId: "history-progression-v1" });
   if (frequencyHold.size) decisionReasons.push({ type: "recovery", reason: `Weekly frequency is already at the ${WEEKLY_FREQUENCY_TARGET.min}–${WEEKLY_FREQUENCY_TARGET.max}x target for ${[...frequencyHold].join(", ")}; this week no extra volume is added to those muscles.`, ruleId: WEEKLY_FREQUENCY_TARGET.ruleId });
   if (intervalHold.size) decisionReasons.push({ type: "recovery", reason: `${[...intervalHold].join(", ")} were trained within the last ${MIN_SAME_MUSCLE_INTERVAL_HOURS} hours; muscle protein synthesis is still elevated, so no strength work for those muscles today (low-intensity movement is still allowed).`, ruleId: MIN_SAME_MUSCLE_INTERVAL_RULE_ID });
+  if (sorenessSkipped.size) decisionReasons.push({ type: "recovery", reason: `Reported soreness for ${[...sorenessSkipped].join(", ")} could not be applied: after excluding those muscles there were fewer than 3 candidate exercises, so the session was kept as-is instead of returning an unusable plan.`, ruleId: SORENESS_NOT_APPLIED_RULE_ID });
   const legacyRuleIds = ["session_movement_coverage_v0", "target_rir_v0", "set_range_v0", "progression_requires_history_v0", "duration_recipe_v0"];
-  const prescription: Prescription = { goal, workingSets, maxWorkingSets, availableDurationMinutes: available, plannedDurationMinutes: planned, optionalDurationMinutes: optional, movementPatterns: patterns, reasoningSummary, ruleIds: [...new Set([...legacyRuleIds, ...stimulus.ruleIds, ...(frequencyHold.size ? [WEEKLY_FREQUENCY_TARGET.ruleId] : []), ...(intervalHold.size ? [MIN_SAME_MUSCLE_INTERVAL_RULE_ID] : [])])], decisionReasons };
-  return { schemaVersion: "1.2", sessionId: randomUUID(), userId: context.userId, createdAt: new Date().toISOString(), durationMinutes: available, availableDurationMinutes: available, durationIntent, plannedDurationMinutes: planned, optionalDurationMinutes: optional, goal, environment: context.environment, gymId: context.gymId, restrictions: context.restrictions, intensity: context.intensityPreference ?? (stimulus.goal === "recovery" || stimulus.goal === "mobility" || ["fatigued", "very_fatigued"].includes(context.recoveryState) ? "low" : "moderate"), status: "preview", warmupMinutes, exercises: items, blocks, prescription, requiredStimulus: stimulus, prescriptionDiagnostics: { totalWorkingSets: workingSets, movementPatternSets: patternSets, blockDuration }, cooldownMinutes, safetyNotes: context.soreness.length ? [`检测到${context.soreness.map(x => ({ chest: "胸", shoulder: "肩", lower_back: "腰背", legs: "腿", unknown: "" } as Record<string, string>)[x] ?? x).join("、")}部酸痛，今天会控制相关部位的强度，训练中如出现疼痛请立即停止。`] : [], estimatedDurationMinutes: planned, durationBreakdown: breakdown, durationShortfallReason: planned > available ? "最低安全处方超过可用时间。" : context.durationIntent === "target" && available - planned > 3 ? "当前动作库无法安全填满目标时长。" : undefined, runtime: { currentExerciseIndex: 0, currentSetNumber: 1, activeWorkoutMs: 0, events: [] } };
+  const prescription: Prescription = { goal, workingSets, maxWorkingSets, availableDurationMinutes: available, plannedDurationMinutes: planned, optionalDurationMinutes: optional, movementPatterns: patterns, reasoningSummary, ruleIds: [...new Set([...legacyRuleIds, ...stimulus.ruleIds, ...(frequencyHold.size ? [WEEKLY_FREQUENCY_TARGET.ruleId] : []), ...(intervalHold.size ? [MIN_SAME_MUSCLE_INTERVAL_RULE_ID] : []), ...(sorenessSkipped.size ? [SORENESS_NOT_APPLIED_RULE_ID] : [])])], decisionReasons };
+  return { schemaVersion: "1.2", sessionId: randomUUID(), userId: context.userId, createdAt: new Date().toISOString(), durationMinutes: available, availableDurationMinutes: available, durationIntent, plannedDurationMinutes: planned, optionalDurationMinutes: optional, goal, environment: context.environment, gymId: context.gymId, restrictions: context.restrictions, intensity: context.intensityPreference ?? (stimulus.goal === "recovery" || stimulus.goal === "mobility" || ["fatigued", "very_fatigued"].includes(context.recoveryState) ? "low" : "moderate"), status: "preview", warmupMinutes, exercises: items, blocks, prescription, requiredStimulus: stimulus, prescriptionDiagnostics: { totalWorkingSets: workingSets, movementPatternSets: patternSets, blockDuration }, cooldownMinutes, safetyNotes: sorenessNotes(context.soreness, sorenessSkipped), estimatedDurationMinutes: planned, durationBreakdown: breakdown, durationShortfallReason: planned > available ? "最低安全处方超过可用时间。" : context.durationIntent === "target" && available - planned > 3 ? "当前动作库无法安全填满目标时长。" : undefined, runtime: { currentExerciseIndex: 0, currentSetNumber: 1, activeWorkoutMs: 0, events: [] } };
 }
 
 function addEvent(session: WorkoutSession, type: string, now: string, details?: Record<string, unknown>) { session.runtime.events.push({ id: randomUUID(), type, at: now, exerciseId: session.exercises[session.runtime.currentExerciseIndex]?.exerciseId, details }); }

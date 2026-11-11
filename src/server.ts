@@ -22,7 +22,7 @@ import { applyLateFeedback } from "./core.ts"; // D17:组后补充反馈(不报�
 import { CUE_TEMPLATES } from "./perception.js"; // 组内听觉感知 v1:时机引擎话术锚点(纯 JS,前后端共用)
 import { detectSource, matchExercise, parseDoseText, assessItem, summarizePlan } from "./import-plan.ts"; // D27:把别人的计划拆成我们的结构
 import { fetchBilibiliMeta, fetchYoutubeMeta, transcribeMedia } from "./import-fetch.ts"; // D27:链接 → 文字（元信息优先，转写兜底）
-import { buildMuscleLedger, ledgerSignals } from "./muscles.ts"; // 肌群疲劳账本(按部位聚合,纯函数)
+import { buildLightExerciseIds, buildMuscleLedger, ledgerSignals } from "./muscles.ts"; // 肌群疲劳账本(按部位聚合,纯函数)
 import { buildCheckIn } from "./companion.ts";
 import { buildDailyReport } from "./daily-report.ts";
 import { renderBodyMap } from "./body-map.ts";
@@ -70,9 +70,24 @@ for (const stored of db.prepare("SELECT session_id, user_id, data_json FROM expe
   db.prepare("UPDATE experiment_records SET data_json = ? WHERE session_id = ?").run(JSON.stringify(record), stored.session_id);
 }
 
+// 低强度活动清单（快走/活动度）：账本里照记训练量，但不算一次力量训练，
+// 不触发 24h 硬线与周频次（与 core.ts 的排课口径同源，2026-11-11）。
+const lightExerciseIds = buildLightExerciseIds(exercises);
+const musclesByExercise = Object.fromEntries(exercises.map(e => [e.id, e.primaryMuscles]));
+
 const provider = new LocalLanguageModelProvider();
 // H3(2026-11-06 全仓审查):用户输入错误(400,信息面向用户)与内部错误(500,不回显细节)的判别标记
 class UserInputError extends Error {}
+// P0(2026-11-11 审查):userId 会进文件路径、响应头、SQL 参数,必须是"能安全落地的名字"。
+// 前端(public/index.html 的 avatar 切换)早已限定 1–40 位英文/数字/连字符/下划线,
+// 这里把同一条口径搬到服务端——此前 `/api/report/daily?userId=..%2Fpublic%2Fx&save=1`
+// 真的会把 Markdown 写到仓库任意目录,导出接口还会把换行拼进 content-disposition。
+const USER_ID_PATTERN = /^[a-zA-Z0-9_-]{1,40}$/;
+function requireUserId(value: unknown, fallback = "demo-user"): string {
+  const id = value === undefined || value === null || value === "" ? fallback : value;
+  if (typeof id !== "string" || !USER_ID_PATTERN.test(id)) throw new UserInputError("训练者 ID 只能使用 1–40 位英文、数字、连字符或下划线。");
+  return id;
+}
 const isInternalError = (error: unknown): boolean => {
   if (error instanceof UserInputError) return false;
   if (!(error instanceof Error)) return true;
@@ -275,16 +290,24 @@ function prepareWorkout(session: WorkoutSession) {
 // 这样"聊出来的课程"和"首页排的一场"走同一套建课接口,剂量仍由规则层算。
 const PROGRAM_SLOT_QUESTIONS: Record<string, string> = {
   sessionsPerWeek: "一周想练几次？3 次是个能坚持的开始。",
-  equipment: "在家还是去健身房？手边有哑铃或弹力带吗？（只有自重也可以）",
+  // 2026-11-11 审查：原问句同时问了"在哪练"和"有什么器械"，但只收 equipment，
+  // 用户答"健身房"时一个槽位都填不上 → 同一句被原样再问一遍，对话卡死。
+  // 现在问句只问器械，并给全可回答的词（含"健身房"，直接对应 gym + 哑铃）。
+  equipment: "手边有什么器械？哑铃、弹力带，或者只有自重。去健身房就说「健身房」。",
 };
+/** 缺器械时的第二次提问：换说法，避免用户听到同一句。 */
+const PROGRAM_EQUIPMENT_RETRY = "还需要知道器械：哑铃、弹力带，或者只有自重？";
 function collectProgramSlots(text: string) {
   const cn: Record<string, number> = { 一: 1, 两: 2, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8 };
   const num = (s: string | undefined) => (s === undefined ? undefined : /^\d+$/.test(s) ? Number(s) : cn[s]);
   const weeks = num(text.match(/(?:(\d{1,2})|[一二两三四五六七八])\s*周/)?.[1] ?? text.match(/([一二两三四五六七八])\s*周/)?.[1]);
   const perWeek = num(text.match(/(?:每周|一周|一个星期)\s*(?:练|训练)?\s*(\d|[一二两三四五六])/)?.[1]);
   const minutes = num(text.match(/(\d{1,3})\s*分钟/)?.[1]);
-  const equipment = /哑铃/.test(text) ? ["dumbbell"] : /弹力带|阻力带/.test(text) ? ["band"] : /徒手|自重|没有器械|没器械|无器械/.test(text) ? ["bodyweight"] : undefined;
-  const environment: "home" | "gym" | "office" = /健身房|去练|器械齐全/.test(text) ? "gym" : /办公室/.test(text) ? "office" : "home";
+  // 器械：用户明确说"器械都有/齐全"也算授权（健身房的默认配置），不再当作猜。
+  const gymContext = /健身房|去练|器械齐全|器械都有|都有器械|什么器械都有/.test(text);
+  const allEquipment = /器械(?:都|齐全|很全)|都有器械|什么都有/.test(text);
+  const equipment = /哑铃/.test(text) ? ["dumbbell"] : /弹力带|阻力带/.test(text) ? ["band"] : /徒手|自重|没有器械|没器械|无器械/.test(text) ? ["bodyweight"] : allEquipment ? ["dumbbell"] : undefined;
+  const environment: "home" | "gym" | "office" = gymContext ? "gym" : /办公室/.test(text) ? "office" : "home";
   const goal = /下肢|练腿|腿部/.test(text) ? "想练下肢" : /恢复|放松|活动一下/.test(text) ? "想做恢复训练" : "想练全身";
   const missing = [perWeek === undefined ? "sessionsPerWeek" : null, equipment === undefined ? "equipment" : null].filter((x): x is string => Boolean(x));
   return { slots: { weeks, sessionsPerWeek: perWeek, targetMinutes: minutes, equipment, environment, goal }, missing };
@@ -439,14 +462,22 @@ function finalize(session: WorkoutSession, survey?: SafeSurvey) {
       if (row) {
         const program = JSON.parse(row.data_json) as Program;
         const measured = sets.filter(s => s.actualRepsSource === "counted" || s.actualRepsSource === "reported").length;
-        const updated = recordCompletion(program, {
-          programSessionId: session.program.programSessionId,
-          workoutSessionId: session.sessionId,
-          completedAt: session.runtime.completedAt ?? new Date().toISOString(),
-          planned: session.exercises.map(e => ({ exerciseId: e.exerciseId, name: e.name, sets: e.sets, targetReps: e.targetReps })),
-          measuredSets: measured,
-        });
-        db.prepare("UPDATE programs SET status = ?, data_json = ? WHERE id = ?").run(updated.status, JSON.stringify(updated), updated.programId);
+        // P0(2026-11-11 审查):"开-结束"曾能刷满课程。原先只看 status,而 abort 也走这里,
+        // 于是一组没做也算"完成一场"(实测连点三次 → 3/12)。产品口径是"完成的是这一场模板,
+        // 证据是真实的组记录",那就必须真有组落库才算数——按组数,不按 counted/reported:
+        // 用户不报数时假设组也是真实发生的训练量(assumed 只是"次数来源",不是"没练")。
+        // 但束之高阁的进度不能因此倒退:已经记过的场次不重复计入,也不会被删。
+        const evidenceSets = sets.filter(s => !s.pain).length;
+        if (evidenceSets > 0) {
+          const updated = recordCompletion(program, {
+            programSessionId: session.program.programSessionId,
+            workoutSessionId: session.sessionId,
+            completedAt: session.runtime.completedAt ?? new Date().toISOString(),
+            planned: session.exercises.map(e => ({ exerciseId: e.exerciseId, name: e.name, sets: e.sets, targetReps: e.targetReps })),
+            measuredSets: measured,
+          });
+          db.prepare("UPDATE programs SET status = ?, data_json = ? WHERE id = ?").run(updated.status, JSON.stringify(updated), updated.programId);
+        }
       }
     } catch { /* 课程进度失败不影响训练落库 */ }
   }
@@ -634,12 +665,12 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
     if (req.method === "GET" && url.pathname === "/api/history") {
-      const userId = url.searchParams.get("userId") ?? "demo-user";
+      const userId = requireUserId(url.searchParams.get("userId"));
       const rows = db.prepare("SELECT tr.data_json AS record_json, ws.data_json AS session_json FROM training_records tr JOIN workout_sessions ws ON ws.id = tr.session_id WHERE tr.user_id = ? ORDER BY ws.created_at DESC LIMIT 30").all(userId) as any[];
       return json(res, 200, { sessions: rows.map(row => { const workout = JSON.parse(row.session_json); const sets = db.prepare("SELECT data_json FROM set_records WHERE json_extract(data_json, '$.sessionId') = ? ORDER BY json_extract(data_json, '$.completedAt')").all(workout.sessionId).map((x: any) => JSON.parse(x.data_json)); return { record: JSON.parse(row.record_json), workout, sets }; }) });
     }
     if (req.method === "GET" && url.pathname === "/api/profile") {
-      const userId = url.searchParams.get("userId") ?? "demo-user", row = db.prepare("SELECT data_json FROM experience_preferences WHERE user_id = ?").get(userId) as { data_json: string } | undefined;
+      const userId = requireUserId(url.searchParams.get("userId")), row = db.prepare("SELECT data_json FROM experience_preferences WHERE user_id = ?").get(userId) as { data_json: string } | undefined;
       const sessions = db.prepare("SELECT data_json FROM workout_sessions WHERE user_id = ? AND status = 'completed'").all(userId).map((x: any) => JSON.parse(x.data_json) as WorkoutSession);
       const ids = new Set(sessions.map(x => x.sessionId)), sets = db.prepare("SELECT data_json FROM set_records").all().map((x: any) => JSON.parse(x.data_json) as SetRecord).filter(x => ids.has(x.sessionId)), trainingRecords = loadTrainingRecords(userId, ids);
       const context = db.prepare("SELECT data_json FROM session_contexts WHERE user_id = ? ORDER BY created_at DESC LIMIT 1").get(userId) as { data_json: string } | undefined;
@@ -647,7 +678,7 @@ const server = createServer(async (req, res) => {
     }
     // 日常陪伴照面(2026-11-09):训练之外"它先说一句"。只读，话术由规则产出。
     if (req.method === "GET" && url.pathname === "/api/companion") {
-      const userId = url.searchParams.get("userId") ?? "demo-user";
+      const userId = requireUserId(url.searchParams.get("userId"));
       const rows = (db.prepare("SELECT data_json FROM workout_sessions WHERE user_id = ? AND status = 'completed'").all(userId) as Array<{ data_json: string }>)
         .map(r => JSON.parse(r.data_json));
       const done = rows.map(s => (s.runtime?.completedAt ?? s.createdAt) as string).filter(Boolean).sort();
@@ -657,7 +688,7 @@ const server = createServer(async (req, res) => {
       const ids = new Set((db.prepare("SELECT id FROM workout_sessions WHERE user_id = ?").all(userId) as Array<{ id: string }>).map(r => r.id));
       const setsForLedger = (db.prepare("SELECT data_json FROM set_records").all() as Array<{ data_json: string }>)
         .map(r => JSON.parse(r.data_json)).filter((s: any) => ids.has(s.sessionId) && typeof s.completedAt === "string");
-      const ledger = buildMuscleLedger({ sets: setsForLedger, musclesByExercise: Object.fromEntries(exercises.map(e => [e.id, e.primaryMuscles])) });
+      const ledger = buildMuscleLedger({ sets: setsForLedger, musclesByExercise, lightExerciseIds });
       const neglectedLabels = ledger.filter(x => x.state === "neglected").map(x => x.label);
       const trainedToday = last ? new Date(last).toDateString() === new Date().toDateString() : false;
       return json(res, 200, {
@@ -671,7 +702,7 @@ const server = createServer(async (req, res) => {
     }
     // 数据导出(2026-11-09, owner 要求):"数据资产归用户"。JSON 全量 + 可选删除。
     if (req.method === "GET" && url.pathname === "/api/export") {
-      const userId = url.searchParams.get("userId") ?? "demo-user";
+      const userId = requireUserId(url.searchParams.get("userId"));
       const one = (sql: string) => (db.prepare(sql).all(userId) as Array<{ data_json: string }>).map(r => JSON.parse(r.data_json));
       const sessions = one("SELECT data_json FROM workout_sessions WHERE user_id = ? ORDER BY created_at");
       const ids = new Set(sessions.map((s: any) => s.sessionId));
@@ -694,7 +725,7 @@ const server = createServer(async (req, res) => {
     }
     // 删除全部数据(2026-11-09):合规要求"能删"。顺序遵守外键依赖。
     if (req.method === "DELETE" && url.pathname === "/api/export") {
-      const userId = url.searchParams.get("userId") ?? "demo-user";
+      const userId = requireUserId(url.searchParams.get("userId"));
       db.exec("BEGIN IMMEDIATE");
       try {
         const ids = (db.prepare("SELECT id FROM workout_sessions WHERE user_id = ?").all(userId) as Array<{ id: string }>).map(r => r.id);
@@ -709,24 +740,24 @@ const server = createServer(async (req, res) => {
           db.prepare("DELETE FROM workout_exercises WHERE session_id = ?").run(id);
           db.prepare("DELETE FROM exercise_instances WHERE session_id = ?").run(id);
         }
-        for (const t of ["workout_sessions", "training_records", "experiment_records", "session_contexts", "programs", "user_training_model_snapshots", "experience_preferences"]) db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(userId);
+        for (const t of ["workout_sessions", "training_records", "experiment_records", "session_contexts", "programs", "user_training_model_snapshots", "experience_preferences", "exercise_performances"]) db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(userId);
         db.exec("COMMIT");
       } catch (error) { db.exec("ROLLBACK"); throw error; }
       return json(res, 200, { ok: true, deleted: userId });
     }
     // 人体示意图(2026-11-09):8 个部位按账本状态上色，直接给 <img> 用。
     if (req.method === "GET" && url.pathname === "/api/body-map.svg") {
-      const userId = url.searchParams.get("userId") ?? "demo-user";
+      const userId = requireUserId(url.searchParams.get("userId"));
       const ids = new Set((db.prepare("SELECT id FROM workout_sessions WHERE user_id = ?").all(userId) as Array<{ id: string }>).map(r => r.id));
       const sets = (db.prepare("SELECT data_json FROM set_records").all() as Array<{ data_json: string }>)
         .map(r => JSON.parse(r.data_json)).filter((x: any) => ids.has(x.sessionId) && typeof x.completedAt === "string");
-      const ledger = buildMuscleLedger({ sets, musclesByExercise: Object.fromEntries(exercises.map(e => [e.id, e.primaryMuscles])) });
+      const ledger = buildMuscleLedger({ sets, musclesByExercise, lightExerciseIds });
       res.writeHead(200, { "content-type": "image/svg+xml; charset=utf-8", "cache-control": "no-store" });
       return res.end(renderBodyMap(ledger, { width: Number(url.searchParams.get("w")) || 240 }));
     }
     // 每日日报(2026-11-09):把当天事实压成一页 Markdown。本地生成，不联外部服务。
     if (req.method === "GET" && url.pathname === "/api/report/daily") {
-      const userId = url.searchParams.get("userId") ?? "demo-user";
+      const userId = requireUserId(url.searchParams.get("userId"));
       const localDate = (t: number | string) => new Date(t).toLocaleDateString("sv-SE");
       const today = localDate(Date.now());
       const rows = (db.prepare("SELECT data_json FROM workout_sessions WHERE user_id = ? AND status = 'completed'").all(userId) as Array<{ data_json: string }>)
@@ -736,7 +767,7 @@ const server = createServer(async (req, res) => {
       const ids = new Set(rows.map(s => s.sessionId));
       const sets = (db.prepare("SELECT data_json FROM set_records").all() as Array<{ data_json: string }>)
         .map(r => JSON.parse(r.data_json)).filter((x: any) => ids.has(x.sessionId) && typeof x.completedAt === "string");
-      const ledger = buildMuscleLedger({ sets, musclesByExercise: Object.fromEntries(exercises.map(e => [e.id, e.primaryMuscles])) });
+      const ledger = buildMuscleLedger({ sets, musclesByExercise, lightExerciseIds });
       const rel = userRelationship(userId);
       const mon = new Date(); mon.setHours(0, 0, 0, 0); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
       const weekSets = sets.filter((x: any) => Date.parse(x.completedAt) >= mon.getTime());
@@ -760,29 +791,29 @@ const server = createServer(async (req, res) => {
     // 肌群疲劳账本(2026-11-09):按部位聚合真实完成的组，给出恢复状态。
     // 纯读接口：不改任何状态；排课要不要用这些信号由调用方决定。
     if (req.method === "GET" && url.pathname === "/api/muscles") {
-      const userId = url.searchParams.get("userId") ?? "demo-user";
+      const userId = requireUserId(url.searchParams.get("userId"));
       const ids = new Set((db.prepare("SELECT id FROM workout_sessions WHERE user_id = ?").all(userId) as Array<{ id: string }>).map(r => r.id));
       const sets = (db.prepare("SELECT data_json FROM set_records").all() as Array<{ data_json: string }>)
         .map(r => JSON.parse(r.data_json))
         .filter((s: any) => ids.has(s.sessionId) && typeof s.completedAt === "string");
       const musclesByExercise = Object.fromEntries(exercises.map(e => [e.id, e.primaryMuscles]));
-      const ledger = buildMuscleLedger({ sets, musclesByExercise });
+      const ledger = buildMuscleLedger({ sets, musclesByExercise, lightExerciseIds });
       return json(res, 200, { userId, muscles: ledger, signals: ledgerSignals(ledger) });
     }
     if (req.method === "GET" && url.pathname === "/api/progress") {
       // 进步叙事 + 关系进度 + 回归钩子 + 课程章节:一次给全端(记录页 / 首页 / 叙事记忆共用同一口径)
-      const userId = url.searchParams.get("userId") ?? "demo-user", progress = userProgress(userId), rel = userRelationship(userId);
+      const userId = requireUserId(url.searchParams.get("userId")), progress = userProgress(userId), rel = userRelationship(userId);
       const program = activeProgram(userId);
       return json(res, 200, { ...progress, relationship: rel, nudge: nudgeFor(rel), program: program ? { program, status: programStatus(program) } : null });
     }
     // ── 多周课程:Program → Week → Session(模板),执行事实在 workout_sessions ──
     if (req.method === "GET" && url.pathname === "/api/programs/active") {
-      const userId = url.searchParams.get("userId") ?? "demo-user", program = activeProgram(userId);
+      const userId = requireUserId(url.searchParams.get("userId")), program = activeProgram(userId);
       return json(res, 200, program ? { program, status: programStatus(program) } : { program: null, status: null });
     }
     if (req.method === "POST" && url.pathname === "/api/programs") {
       const input = await body(req);
-      const userId = typeof input.userId === "string" && input.userId ? input.userId : "demo-user";
+      const userId = requireUserId(input.userId);
       const goal = typeof input.goal === "string" && input.goal.trim() ? input.goal.trim().slice(0, 40) : "全身力量";
       const program = buildProgram({
         programId: crypto.randomUUID(), userId, goal,
@@ -798,7 +829,7 @@ const server = createServer(async (req, res) => {
     const programStart = url.pathname.match(/^\/api\/programs\/([^/]+)\/start$/);
     if (req.method === "POST" && programStart) {
       const input = await body(req);
-      const program = activeProgram((typeof input.userId === "string" && input.userId) || "demo-user");
+      const program = activeProgram(requireUserId(input.userId));
       if (!program || program.programId !== programStart[1]) throw new Error("课程不存在。");
       const status = programStatus(program), template = status.nextSession;
       if (!template) return json(res, 409, { error: "这个课程已经全部完成。" });
@@ -848,7 +879,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/api/experiment/export.json") return json(res, 200, experimentRows(requestedOrigin(url)));
     if (req.method === "GET" && url.pathname === "/api/experiment/export.csv") { res.writeHead(200, { "content-type": "text/csv; charset=utf-8", "content-disposition": "attachment; filename=trainmind-experiment.csv" }); return res.end(experimentRecordsCsv(experimentRows(requestedOrigin(url)))); }
     if (req.method === "GET" && url.pathname === "/api/workouts/active") {
-      const userId = url.searchParams.get("userId") ?? "demo-user";
+      const userId = requireUserId(url.searchParams.get("userId"));
       archiveStalePreviews(userId);
       const stale = db.prepare("SELECT id, data_json FROM workout_sessions WHERE user_id = ? AND status NOT IN ('completed','aborted') AND datetime(created_at) < datetime('now', '-48 hours')").all(userId) as Array<{ id: string; data_json: string }>;
       for (const row of stale) { try { const d = JSON.parse(row.data_json) as { status?: string }; d.status = "aborted"; db.prepare("UPDATE workout_sessions SET status='aborted', data_json=? WHERE id=?").run(JSON.stringify(d), row.id); } catch { db.prepare("UPDATE workout_sessions SET status='aborted' WHERE id=?").run(row.id); } }
@@ -882,7 +913,7 @@ const server = createServer(async (req, res) => {
       // 演示里这一步必须"立刻回",不能被模型延迟拖住;参数也绝不交给模型猜。
       // 多轮续接:用户第二句往往只是"每周三次"这种回答,不含"计划"二字,
       // 所以还要看历史里上一问是不是我们自己的槽位提问,否则会掉回自由对话。
-      const slotQuestions = Object.values(PROGRAM_SLOT_QUESTIONS);
+      const slotQuestions = [...Object.values(PROGRAM_SLOT_QUESTIONS), PROGRAM_EQUIPMENT_RETRY];
       const inProgramFlow = history.some(x => x.role === "assistant" && slotQuestions.some(q => x.content.includes(q)));
       if (!session && (wantsProgramPlan(input.message) || inProgramFlow)) {
         const said = [...history.filter(x => x.role === "user").map(x => x.content), input.message].join("，");
@@ -891,9 +922,12 @@ const server = createServer(async (req, res) => {
           weeks: slots.weeks ?? 4, sessionsPerWeek: slots.sessionsPerWeek!, targetMinutes: slots.targetMinutes ?? 30,
           equipment: slots.equipment!, goal: slots.goal, environment: slots.environment,
         };
+        // 同一个槽位已经问过就换一句问法：用户答"健身房"这类问句里没点名的词时，
+        // 如果原样重复，对话看起来像死机（2026-11-11 审查复现）。
+        const askedAlready = (key: string) => slotQuestions.includes(PROGRAM_SLOT_QUESTIONS[key]!) && history.some(x => x.role === "assistant" && x.content.includes(PROGRAM_SLOT_QUESTIONS[key]!));
         const reply = programProposal
           ? `${programProposal.weeks} 周 · 每周 ${programProposal.sessionsPerWeek} 次 · 每次 ${programProposal.targetMinutes} 分钟左右，目标是${programProposal.goal}。前两周建立动作模式，第三周加深，最后一周巩固；每一场的剂量仍然按你当天的状态算。要开始就说一声，我把它放进你的课程。`
-          : PROGRAM_SLOT_QUESTIONS[missing[0]!]!;
+          : missing[0] === "equipment" && askedAlready("equipment") ? PROGRAM_EQUIPMENT_RETRY : PROGRAM_SLOT_QUESTIONS[missing[0]!]!;
         return json(res, 200, { reply, mode: "program_proposal", programProposal, programSlotsMissing: missing, status: null });
       }
       // 心理安抚(2026-11-09):谈情绪时先接住。只在模型已配置时接管，
@@ -916,7 +950,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && perceptionMatch) {
       const input = await body(req);
       const trigger = typeof input.trigger === "string" ? input.trigger : "";
-      if (!(trigger in CUE_TEMPLATES)) return json(res, 400, { error: "未知感知触发。" });
+      if (!Object.hasOwn(CUE_TEMPLATES, trigger)) return json(res, 400, { error: "未知感知触发。" });
       const evidence = typeof input.evidence === "string" && input.evidence.trim() ? input.evidence.trim().slice(0, 120) : null;
       const session = loadSession(perceptionMatch[1]);
       // 只有真实组内(报数进行中)的感知才有资格说话;其余一律静默丢弃
@@ -943,7 +977,7 @@ const server = createServer(async (req, res) => {
       const raw = typeof input.input === "string" ? input.input.trim() : "";
       if (!raw) return json(res, 400, { error: "把链接或计划文字粘进来。" });
       if (raw.length > 8000) return json(res, 400, { error: "太长了，先截到 8000 字以内。" });
-      const userId = typeof input.userId === "string" && input.userId ? input.userId : "demo-user";
+      const userId = requireUserId(input.userId);
       requestUserId = userId;
       const source = detectSource(raw);
       let text = raw, title = "", viaLink = false, transcripted = false, note: string | undefined;
@@ -1009,10 +1043,18 @@ const server = createServer(async (req, res) => {
       // 导致首页"生成计划"的每一场真练都被打上演示数据,实验看板里一条 human 都没有。
       // demo / automated_test 只在调用方显式指定时使用(演示包与自动化测试)。
       // 注意:这里的 input 是用户那句话(字符串)。加练标记是另一个字段 kind,必须单独解构。
-      const { input, userId = "demo-user", knownEnvironment, experienceMode = "minimal", topic = "history", talkativeness = "medium", randomAssignment = false, dataOrigin = "human", kind } = await body(req);
+      const { input, userId: rawUserId, knownEnvironment, experienceMode = "minimal", topic = "history", talkativeness = "medium", randomAssignment = false, dataOrigin = "human", kind } = await body(req);
+      // P0(2026-11-11):体验字段此前原样透传。topic 不在白名单时 configureExperience 里
+      // contentByTopic[topic].map 直接 TypeError → 500「服务器开小差了」,把用户的输入错误
+      // 说成服务故障(还会堆一条错误日志)。这里按枚举收紧,与 dataOrigin 的写法保持一致。
+      const userId = requireUserId(rawUserId);
       requestUserId = userId;
       if (typeof input !== "string" || !input.trim()) return json(res, 400, { error: "请输入本次训练需求。" });
       if (!["human", "automated_test", "demo"].includes(dataOrigin)) return json(res, 400, { error: "无效的 dataOrigin。" });
+      if (!["minimal", "content", "companion"].includes(String(experienceMode))) return json(res, 400, { error: "无效的体验模式。" });
+      if (!["AI", "business", "history", "trivia", "story"].includes(String(topic))) return json(res, 400, { error: "无效的内容主题（topic）。" });
+      if (!["low", "medium", "high"].includes(String(talkativeness))) return json(res, 400, { error: "无效的说话频率。" });
+      if (kind !== undefined && kind !== "planned" && kind !== "extra") return json(res, 400, { error: "无效的训练类型。" });
       const sessions = db.prepare("SELECT data_json FROM workout_sessions WHERE user_id = ? ORDER BY created_at DESC").all(userId).map((x: any) => JSON.parse(x.data_json) as WorkoutSession);
       const sessionIds = new Set(sessions.map(x => x.sessionId));
       const sets = db.prepare("SELECT data_json FROM set_records").all().map((x: any) => JSON.parse(x.data_json) as SetRecord).filter(x => sessionIds.has(x.sessionId));

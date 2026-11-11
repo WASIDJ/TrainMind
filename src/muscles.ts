@@ -85,6 +85,26 @@ export const MIN_SAME_MUSCLE_INTERVAL_RULE_ID = "muscle-min-interval-24h-v1";
 
 export type IntervalStatus = "none" | "too_soon" | "ok";
 
+/**
+ * 低强度活动（2026-11-11 审查）：这些动作**不算一次力量训练**。
+ *
+ * 为什么单独列：24 小时硬线与每周 2–3 次的口径，出处针对的都是"同一部位再做高强度"
+ * （MPS 时程、Schoenfeld 频率 meta）。快走、活动度、拉伸既不是高强度，也不造成
+ * 需要 24 小时修复的肌损伤。把它们的组数直接灌进账本，会得出
+ * "昨天走了 20 分钟 → 今天不许练腿"这种结论——与"只拦力量动作"的设计正好相反。
+ *
+ * 判定按动作形态而非动作名：repOrTimeBased === "time" 且 attentionLevel === "low"
+ * （目前是原地快走、站姿活动度）。拉伸类 attentionLevel 是 medium，仍按训练量记，
+ * 只是它们很少成为主项，不会触到硬线。
+ *
+ * 注意：**不删账本里的事实**——sets7d/sets28d 照记（展示层要看得到"今天动过"），
+ * 只是不参与 intervalStatus / frequencyStatus / sessions7d 这三项"排课约束"。
+ */
+export interface LightActivityInput { id: string; repOrTimeBased?: "reps" | "time"; attentionLevel?: string }
+export function buildLightExerciseIds(catalog: LightActivityInput[]): Set<string> {
+  return new Set(catalog.filter(x => x.repOrTimeBased === "time" && x.attentionLevel === "low").map(x => x.id));
+}
+
 export interface MuscleLedgerEntry {
   group: MuscleGroup;
   label: string;
@@ -124,6 +144,11 @@ export interface BuildLedgerInput {
   sets: LedgerSet[];
   /** exerciseId → 该动作训练的肌群名（primaryMuscles 原样传入，内部再映射） */
   musclesByExercise: Record<string, string[]>;
+  /**
+   * 低强度活动 id（见 buildLightExerciseIds）。给了就把它们排除在
+   * "24 小时硬线 + 周频次"之外；不给则保持旧行为（所有组都算训练）。
+   */
+  lightExerciseIds?: Set<string>;
   now?: number;
 }
 
@@ -131,30 +156,47 @@ const DAY = 86_400_000;
 /** 超过这个天数没练，就算"被落下" */
 export const NEGLECT_DAYS = 14;
 
+type LedgerRow = {
+  sets7d: number; sets28d: number; measured7d: number; assumed7d: number;
+  /** 近 7 天里属于力量训练的组数（排课窗口按它算，不含快走/活动度） */
+  strengthSets7d: number;
+  /** 力量训练的最近一次（低强度活动不更新它：24h 硬线只看力量） */
+  lastStrength: number;
+  /** 任何时候的最近一次（展示层"今天动过"用） */
+  last: number;
+  sessions: Set<string>;
+};
+
 export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] {
   const now = input.now ?? Date.now();
-  const acc = new Map<MuscleGroup, { sets7d: number; sets28d: number; measured7d: number; assumed7d: number; last: number; sessions: Set<string> }>();
+  const light = input.lightExerciseIds;
+  const acc = new Map<MuscleGroup, LedgerRow>();
 
   for (const set of input.sets) {
     const at = Date.parse(set.completedAt);
     if (!Number.isFinite(at)) continue;
     const age = now - at;
     if (age < 0) continue; // 未来时间（时钟漂移/脏数据）不计入
+    // 低强度活动（快走/活动度）：组数与"动过"照记，但不构成一次力量训练——
+    // 不更新 lastStrength、不进 sessions（周频次），因此不触发 24h 硬线。
+    const isLight = Boolean(light?.has(set.exerciseId));
     const muscles = new Set<MuscleGroup>();
     for (const raw of input.musclesByExercise[set.exerciseId] ?? []) {
       const g = canonicalMuscle(raw);
       if (g) muscles.add(g);
     }
     for (const group of muscles) {
-      const row = acc.get(group) ?? { sets7d: 0, sets28d: 0, measured7d: 0, assumed7d: 0, last: 0, sessions: new Set<string>() };
+      const row = acc.get(group) ?? { sets7d: 0, sets28d: 0, measured7d: 0, assumed7d: 0, strengthSets7d: 0, lastStrength: 0, last: 0, sessions: new Set<string>() };
       if (age <= 7 * DAY) {
         row.sets7d += 1;
         if (set.actualRepsSource === "assumed") row.assumed7d += 1; else row.measured7d += 1;
+        if (!isLight) row.strengthSets7d += 1;
         // 频次按"会话"去重（同一天练两组不算两次）；老调用方没有 sessionId 时退化为按日期
-        row.sessions.add(set.sessionId ?? `day:${set.completedAt.slice(0, 10)}`);
+        if (!isLight) row.sessions.add(set.sessionId ?? `day:${set.completedAt.slice(0, 10)}`);
       }
       if (age <= 28 * DAY) row.sets28d += 1;
       if (at > row.last) row.last = at;
+      if (!isLight && at > row.lastStrength) row.lastStrength = at;
       acc.set(group, row);
     }
   }
@@ -170,15 +212,23 @@ export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] 
         intervalStatus: "none" as const,
       };
     }
-    const hours = (now - row.last) / 3_600_000;
+    // 恢复窗口与 24h 硬线只认力量训练；低强度活动只影响"最后一次动过"的展示。
+    // 如果这个部位只有快走/活动度记录，hours 仍按最近一次活动算（展示"今天动过"），
+    // 但 intervalStatus 必须是 none —— 走一会儿不构成需要修复的肌损伤。
+    const hasStrength = row.lastStrength > 0;
+    const hours = (now - (hasStrength ? row.lastStrength : row.last)) / 3_600_000;
     // 训练量越大，恢复窗口越久：近 7 天每多 3 组，多给 25% 窗口（上限 1.5 倍）
-    const window = Math.round(meta.recoveryHours * Math.min(1.5, 1 + Math.max(0, row.sets7d - 3) / 12));
+    const window = Math.round(meta.recoveryHours * Math.min(1.5, 1 + Math.max(0, row.strengthSets7d - 3) / 12));
     const days = hours / 24;
     // 恢复度百分比（2026-11-10）：用于"它越来越懂你"的可感知表达；被落下仍单独标记
     const recoveryPercent = Math.max(0, Math.min(100, Math.round((hours / window) * 100)));
     let state: MuscleState;
     let text: string;
-    if (days >= NEGLECT_DAYS) {
+    if (!hasStrength) {
+      // 只有低强度活动：不是"刚练过"，力量动作随时可以安排
+      state = "recovered";
+      text = `${meta.label}：今天只有低强度活动，力量训练可以安排`;
+    } else if (days >= NEGLECT_DAYS) {
       state = "neglected";
       text = `${meta.label}：${Math.floor(days)} 天没练了`;
     } else if (hours >= window) {
@@ -192,7 +242,7 @@ export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] 
       text = `${meta.label}：今天刚练过 · 建议明天`;
     }
     const sessions7d = row.sessions.size;
-    const intervalStatus: IntervalStatus = hours < MIN_SAME_MUSCLE_INTERVAL_HOURS ? "too_soon" : "ok";
+    const intervalStatus: IntervalStatus = !hasStrength ? "none" : hours < MIN_SAME_MUSCLE_INTERVAL_HOURS ? "too_soon" : "ok";
     const frequencyStatus: FrequencyStatus = sessions7d === 0 ? "none" : sessions7d < WEEKLY_FREQUENCY_TARGET.min ? "below" : sessions7d <= WEEKLY_FREQUENCY_TARGET.max ? "in_range" : "above";
     const frequencyText = frequencyStatus === "none" ? `${meta.label}：本周还没练`
       : frequencyStatus === "below" ? `${meta.label}：本周 ${sessions7d} 次（建议每周 ${WEEKLY_FREQUENCY_TARGET.min}–${WEEKLY_FREQUENCY_TARGET.max} 次）`
