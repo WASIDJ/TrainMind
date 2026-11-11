@@ -166,66 +166,68 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
 .visual-session .training-voice-tools>summary { min-height:44px; display:flex; justify-content:end; align-items:center; padding:8px; font-size:10px; color:#e4d6ec; list-style:none; cursor:pointer; }
 .visual-session .training-voice-tools[open] { bottom:145px; max-height:calc(100% - 200px); overflow:auto; background:#2c2037f2; border:1px solid #9a79ad; border-radius:13px; padding:10px; }
 .visual-session .training-voice-tools .home-suggestion { display:block; font-size:11px; }
-.resting-screen .workout-head { top:61px; }
-.resting-screen .workout-head h1 { font-size:17px; }
-.resting-screen .rest-card { position:absolute; top:116px; left:15px; right:15px; margin:0; padding:8px 10px 8px 55px; min-height:55px; background:#b4a5c338; border:1px solid #b4a5c340; border-radius:9px; backdrop-filter:blur(16px); }
-.resting-screen .rest-card>img { position:absolute; left:9px; top:8px; width:34px; height:39px; border-radius:5px; object-fit:cover; }
-.resting-screen .rest-card strong { font-size:12px; }
-.resting-screen .rest-card p { color:#e0cde9; font-size:10px; margin-top:3px; }
-.resting-screen .rest-console .tm-ring { position:absolute; left:17px; right:17px; bottom:224px; width:auto; height:auto; aspect-ratio:auto; margin:0; background:none; }
-.resting-screen .rest-console .tm-ring strong { font-size:65px; line-height:1; color:#fff; }
-.resting-screen .rest-console .tm-ring small { color:#eee3f7; margin-top:5px; }
-.resting-screen .rest-actions { position:absolute; left:17px; right:17px; bottom:189px; display:flex; justify-content:center; gap:5px; }
-.resting-screen .rest-actions button { background:#42304e89; color:#fff; border-color:#a480b8; min-height:35px; padding:5px 9px; font-size:10px; }
-.resting-screen .coach-card { bottom:118px; }
+/* 休息屏原有的那套 absolute 定位（.rest-card top:116px / .tm-ring bottom:224px /
+   .rest-actions bottom:189px / .coach-card bottom:118px）已在文件末尾被竖排流式版式整体取代，
+   这里只保留仍然有效的两条：折叠式语音工具的位置由流式排版接管、建议行隐藏。 */
+.resting-screen>.tm-stack>.home-suggestion { display:none; }
 .visual-session .tm-footer { display:flex; flex-direction:row; gap:7px; }
 .visual-session .tm-footer::before { position:absolute; top:8px; left:calc(50% - 17px); margin:0; }
 .visual-session .tm-footer>button { flex:1; min-width:0; width:auto; height:44px; min-height:44px; font-size:12px; }
-.resting-screen .training-voice-tools { bottom:330px; }
-.resting-screen>.tm-stack>.home-suggestion { display:none; }
-.resting-screen .agency-card { position:absolute; top:180px; left:15px; right:15px; z-index:4; margin:0!important; padding:9px!important; border:1px solid #a789bd; backdrop-filter:blur(15px); background:#33223fe6!important; }
-.resting-screen .agency-card>div { display:flex!important; flex-direction:row!important; gap:5px!important; }
-.resting-screen .agency-card button { flex:1; font-size:10px; padding:6px; min-height:44px; background:#50375f; color:#f7effc; border:1px solid #a282b8; }
-.resting-screen .agency-card button small { display:none; }
-.resting-screen:has(.agency-card) .rest-console .tm-ring { bottom:209px; }
+/* 暂停页（2026-11-11 重做）：原来标题、语音工具、教练卡、进度条四块各自 absolute 定位，
+   390×844 上中间空出 300px，底部三块叠在一起。改成竖排流式、整块竖直居中：
+   标题 → 教练说 → 进度已保留 → 语音工具，底部操作贴底不动。 */
 .paused-screen .visual-scene { filter:brightness(.45); }
-.paused-screen>.tm-header { position:absolute; top:36%; left:20px; right:20px; margin:0; text-align:center; }
+.paused-screen {
+  display:flex; flex-direction:column; justify-content:center; gap:14px;
+  padding:0 17px 145px;
+}
+.paused-screen>.tm-header,
+.paused-screen>.tm-stack>.tm-coach,
+.paused-screen>.tm-stack>.tm-note,
+.paused-screen .feedback-voice {
+  position:static; left:auto; right:auto; top:auto; bottom:auto; width:auto; max-width:none; margin:0;
+}
+.paused-screen>.tm-header { text-align:center; margin-bottom:2px; }
 .paused-screen>.tm-header>.eyebrow { justify-content:center; }
-.paused-screen>.tm-header h1 { font-size:29px; margin-top:9px; }
+.paused-screen>.tm-header h1 { font-size:32px; margin-top:9px; letter-spacing:-.03em; }
+.paused-screen>.tm-header>p { font-size:12px; color:#a99cb4; }
+.paused-screen>.tm-stack { display:flex; flex-direction:column; gap:12px; }
 .paused-screen>.tm-stack>.tm-ring { display:none; }
-.paused-screen>.tm-stack>.tm-coach { position:absolute; left:17px; right:17px; bottom:180px; }
-.paused-screen>.tm-stack>.tm-note { position:absolute; left:17px; right:17px; bottom:117px; background:#33213dba; border-color:#76607f; padding:9px 11px; }
+.paused-screen>.tm-stack>.tm-note { background:#33213dba; border-color:#76607f; padding:11px 13px; border-radius:14px; }
 .paused-screen>.tm-stack>.tm-note strong { font-size:12px; }
-.paused-screen>.tm-stack>.tm-note p { font-size:10px; color:#decce9; }
-.paused-screen .feedback-voice { position:absolute; left:17px; right:17px; bottom:249px; justify-content:center; }
-.visual-timed-screen .hero { position:absolute; top:65px; left:17px; right:17px; margin:0; padding:0; }
-.visual-timed-screen .hero h1 { font-size:27px; }
-.visual-timed-screen .hero p { font-size:11px; }
-.visual-timed-screen .player { display:contents; }
-.visual-timed-screen .timer { position:absolute; bottom:120px; right:20px; font-size:58px; }
-.visual-timed-screen #mic { min-height:35px; font-size:10px; padding:5px 9px; }
-.visual-timed-screen .player .actions { display:flex; padding-top:20px; }
-.visual-timed-screen .player .actions::before { position:absolute; top:8px; left:calc(50% - 17px); margin:0; }
-.visual-timed-screen .player .actions button { flex:1; min-width:0; font-size:11px; }
-.visual-summary { position:relative; isolation:isolate; min-height:100%; overflow:hidden; padding:240px 0 150px; }
-.visual-summary>.tm-header,.visual-summary>.tm-stack { position:relative; }
+.paused-screen>.tm-stack>.tm-note p { font-size:10.5px; color:#decce9; margin:3px 0 0; }
+.paused-screen .feedback-voice { justify-content:center; text-align:center; }
+.paused-screen .feedback-voice .voice-status { font-size:11px; }
+/* 完成屏：原来整屏铺一张教练照片、正文从 240px 才开始，卡片半透明压在照片上、
+   底部三个按钮又盖住"教练复盘"。改成"照片当页眉带、正文落在实底上"。 */
+.visual-summary {
+  position:relative; isolation:isolate; min-height:100%;
+  padding:0 0 220px;
+}
+.visual-summary>.visual-scene-backdrop { display:none; }
+.visual-summary>.visual-scene {
+  position:absolute; top:0; left:0; width:100%; height:250px;
+  object-fit:cover; object-position:60% 22%; border-radius:0 0 26px 26px; z-index:-2;
+}
+.visual-summary>.visual-shade {
+  position:absolute; top:0; left:0; right:0; height:250px; z-index:-1; border-radius:0 0 26px 26px;
+  background:linear-gradient(180deg,#100d14f2 0%,#100d1466 42%,#0f0c13c4 74%,var(--bg) 100%);
+}
+.visual-summary>.tm-header { position:relative; padding:150px 0 18px; margin:0; }
+.visual-summary>.tm-header h1 { font-size:30px; line-height:1.15; letter-spacing:-.02em; color:#fff; }
+.visual-summary>.tm-header p { color:#e2d6ec; margin-top:4px; }
+.visual-summary>.tm-stack { position:relative; padding:0; }
 .visual-summary>.tm-stack>.tm-coach { background:#2e1d3cb0; }
-.visual-summary .tm-metric { background:#271b30c7; border-color:#705580; }
-.visual-summary .tm-note { background:#302038d9; }
-.visual-summary .tm-footer { background:#302039e8; }
-.visual-summary #summary-survey { background:#251a2ff2; }
+.visual-summary .tm-metric { background:#241f2b; border:1px solid #3a3243; }
+.visual-summary .tm-note { background:#2a2331; border:1px solid #3a3243; }
+.visual-summary .tm-footer { background:#241f2be8; }
+.visual-summary #summary-survey { background:#241f2b; border:1px solid #3a3243; border-radius:16px; padding:0 14px; }
 @media (max-height:650px) {
   .visual-session .workout-head { top:56px; }
   .visual-session .workout-head h1 { font-size:22px; }
   .visual-session .set-prescription { top:141px; }
   .visual-session .training-voice-tools { bottom:250px; }
-  .resting-screen .training-voice-tools { bottom:305px; }
   .visual-session .coach-card { bottom:140px; }
-  .resting-screen .coach-card { bottom:105px; }
-  .resting-screen .rest-console .tm-ring { bottom:207px; }
-  .resting-screen .rest-console .tm-ring strong { font-size:53px; }
-  .resting-screen .rest-actions { bottom:168px; }
-  .resting-screen:has(.agency-card) .rest-console .tm-ring { bottom:190px; }
 }
 @media (prefers-reduced-motion:reduce) { * { animation:none!important; transition:none!important; } }
 
@@ -261,7 +263,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
    比留白更容易让人一眼看出是演示壳。这里用深色渐变 + 大字号动作名 + 要点。 */
 .visual-session.visual-text-first { background:radial-gradient(120% 90% at 70% 0%,#2a2233 0%,#17131d 55%,#0e0b12 100%); }
 .visual-session.visual-text-first::before {
-  content:""; position:absolute; inset:0; pointer-events:none;
+  content:""; position:absolute; inset:0; pointer-events:none; z-index:-1;
   background:linear-gradient(#0c090f00,#0c090f66 70%,#0c090fa8);
 }
 .visual-session.visual-text-first .workout-head { top:78px; }
@@ -305,6 +307,9 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
   /* 底部操作托盘是 absolute（固定贴底），不参与 flex；内容在这块空间里竖直居中，
      短内容就不会在中间留一大片黑，看起来是刻意排版而不是没做完。 */
   padding:96px 17px 176px;
+  /* 内容太短时（1 个动作 1 组、只有 2 条要点）下面会空出 175px。
+     不整块居中（那会把动作名推到屏幕中间偏下），而是把"教练正在说"+语音工具
+     推到贴底操作托盘上方：上方是"现在做什么"，下方是"教练说的和工具"，中间留白是刻意的。 */
   justify-content:flex-start;
 }
 .visual-session.visual-text-first .workout-head,
@@ -326,14 +331,16 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
 .visual-session.visual-text-first .workout-console .tm-ring-copy { display:flex; align-items:baseline; gap:7px; }
 .visual-session.visual-text-first .workout-console .tm-ring strong { font-size:44px; color:#e6ff00; line-height:1; }
 .visual-session.visual-text-first .workout-console .tm-ring small { font-size:12px; color:#cdbdd8; }
-.visual-session.visual-text-first .set-prescription { order:3; flex-wrap:wrap; }
+/* 处方药丸行在大环数字下面重复了同一件事（"第1组 8次 自重" vs "08 本组目标·8次"），
+   文字版式里隐藏；有照片的版式里它是浮在照片上的唯一剂量行，保留。 */
+.visual-session.visual-text-first .set-prescription { display:none; }
 /* 要点按内容高度排，不拉成一个大空盒（空盒子比空白更像没做完）；
    剩余的纵向空间由 body 留白承担，底部操作继续贴底。 */
 /* 要点紧跟处方，不做 margin-top:auto（那会把它推到底部、中间留一片黑）*/
 .visual-session.visual-text-first .visual-cues { order:4; }
 .visual-session.visual-text-first .visual-cues ol { gap:9px; }
 .visual-session.visual-text-first .visual-cues li { font-size:15px; }
-.visual-session.visual-text-first .coach-card { order:5; }
+.visual-session.visual-text-first .coach-card { order:5; margin-top:auto; }
 .visual-session.visual-text-first .training-voice-tools { order:6; }
 .visual-session.visual-text-first .training-voice-tools>summary { justify-content:flex-start; }
 .visual-session.visual-text-first .set-completion { order:7; }
@@ -601,3 +608,150 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
 .checkin-cell.on { background:#e6ff00; }
 .checkin-cell.today { box-shadow:0 0 0 1.5px #e6ff0055; }
 .checkin-cell.today.on { box-shadow:0 0 0 2px #ffffff55; }
+
+/* 暂停页也带 .visual-session.visual-text-first 两个类（文字优先版式的规则会盖住上面的
+   .paused-screen 规则），这里用同权重但更靠后的选择器把流式竖排的居中改回来。 */
+.paused-screen.visual-session {
+  display:flex; flex-direction:column; justify-content:center; gap:14px;
+  /* 底部托盘顶边约在 700px（844 - 141 托盘 - 安全区），内容就在这条线以上居中。 */
+  padding:0 17px 145px;
+}
+
+/* 休息屏（2026-11-11 重做）：原来 .rest-card / .tm-ring / .rest-actions / .coach-card
+   四块各自 absolute（top:116px / bottom:224px / bottom:189px / bottom:118px），390×844 上
+   倒计时被教练卡压住、标题和"已完成 1/1 组"叠字、中间空出 300px。
+   改成竖排流式：这一屏的主角只有一个——倒计时；其余按"接下来练什么 → 能怎么操作 → 教练说"
+   往下排。同屏还带着 .visual-session.visual-text-first，所以选择器要写到同权重以上。 */
+.resting-screen.visual-session {
+  display:flex; flex-direction:column; justify-content:center; gap:15px;
+  padding:78px 17px 150px; overflow-y:auto;
+}
+/* justify-content:center 在内容高于容器时会让顶部溢出到负坐标（倒计时环曾整块压到进度条上）。
+   safe center：放得下就居中，放不下就退回从顶开始。 */
+.resting-screen.visual-session { justify-content:safe center; }
+.resting-screen.visual-session>.visual-session-progress { position:absolute; top:16px; left:17px; right:17px; }
+.resting-screen.visual-session .workout-head,
+.resting-screen.visual-session .rest-console,
+.resting-screen.visual-session .rest-card,
+.resting-screen.visual-session .rest-actions,
+.resting-screen.visual-session .agency-card,
+.resting-screen.visual-session .coach-card,
+.resting-screen.visual-session .training-voice-tools {
+  position:static; left:auto; right:auto; top:auto; bottom:auto; width:auto; max-width:none; margin:0;
+}
+.resting-screen.visual-session .workout-head { order:1; text-align:center; padding:0; }
+.resting-screen.visual-session .workout-head .eyebrow { justify-content:center; }
+.resting-screen.visual-session .workout-head h1 { font-size:17px; line-height:1.2; margin:5px 0 3px; letter-spacing:-.02em; }
+.resting-screen.visual-session .workout-head small { font-size:11px; color:#8d8099; }
+/* 倒计时：75px 数字 + 一圈进度环，占满这一屏的主角位 */
+/* .workout-console 是 display:contents —— 它自己没有盒子，order 加在它身上不生效，
+   必须直接加在 .tm-ring 上，否则倒计时环会掉到整屏最顶上压住进度条。 */
+.resting-screen.visual-session .rest-console .tm-ring {
+  /* position:relative 而不是 static —— 环里的 <svg> 是 absolute inset:0，
+     环一旦变成 static，那块 svg 就相对整屏定位，撑成 390×844 的巨环罩住下面所有内容。
+     left/right/top/bottom 必须显式 auto，否则继承来的旧 absolute 偏移（bottom:224px）
+     在 relative 下会真的把环往上顶 224px。 */
+  order:2; position:relative; left:auto; right:auto; top:auto; bottom:auto;
+  /* !important：.tm-ring 在别处有 `width:clamp(164px,49vw,218px)` 一类按视口的尺寸，
+     这小屏上会撑成一个 380px 的大环，把"下一组"和教练卡整个罩住。 */
+  width:168px!important; height:168px!important; aspect-ratio:1; margin:0 auto;
+  display:grid; place-items:center; background:none; border:0;
+}
+.resting-screen.visual-session .rest-console .tm-ring>svg { display:block; position:absolute; inset:0; width:100%; height:100%; }
+.resting-screen.visual-session .rest-console .tm-ring circle:first-child { stroke:#2b2433; }
+.resting-screen.visual-session .rest-console .tm-ring .ring-arc { stroke:#e6ff00; }
+.resting-screen.visual-session .rest-console .tm-ring-copy { position:relative; text-align:center; display:block; }
+.resting-screen.visual-session .rest-console .tm-ring-copy small { white-space:nowrap; }
+.resting-screen.visual-session .rest-console .tm-ring strong {
+  font-size:60px; line-height:1; color:#fff; letter-spacing:-.045em; font-variant-numeric:tabular-nums;
+}
+.resting-screen.visual-session .rest-console .tm-ring small { display:block; font-size:11px; color:#8d8099; margin:7px 0 0; max-width:none; }
+/* 下一组：唯一一张"接下来做什么"的卡 */
+.resting-screen.visual-session .rest-card {
+  order:3; position:relative; padding:12px 14px; border-radius:14px;
+  background:#241f2b; border:1px solid #3a3243;
+}
+.resting-screen.visual-session .rest-card:has(img) { padding-left:60px; min-height:60px; }
+.resting-screen.visual-session .rest-card>img { position:absolute; left:10px; top:11px; width:38px; height:38px; border-radius:8px; object-fit:cover; }
+.resting-screen.visual-session .rest-card strong { display:block; font-size:14px; font-weight:600; color:#f2ecf6; }
+.resting-screen.visual-session .rest-card p { font-size:11px; color:#8d8099; margin:4px 0 0; }
+.resting-screen.visual-session .agency-card { order:4; border-radius:14px!important; }
+.resting-screen.visual-session .agency-card>div { flex-direction:column!important; gap:7px!important; }
+.resting-screen.visual-session .agency-card button { min-height:42px; font-size:12px; }
+.resting-screen.visual-session .rest-actions { order:5; justify-content:center; gap:7px; }
+.resting-screen.visual-session .rest-actions button { min-height:40px; padding:8px 14px; font-size:12px; background:#241f2b; border:1px solid #3a3243; color:#cdc0d6; }
+.resting-screen.visual-session .coach-card { order:6; }
+.resting-screen.visual-session .training-voice-tools { order:7; }
+.resting-screen.visual-session .training-voice-tools>summary { justify-content:flex-start; font-size:11px; color:#8d8099; }
+.resting-screen.visual-session .training-voice-tools[open] { background:#241f2b; border:1px solid #3a3243; border-radius:14px; padding:12px; }
+/* 动作要点与照片参考留给真正开始那一组的屏幕：休息的 60 秒里只有倒计时该被盯着。
+   照片参考卡（.visual-photo-reference）本来是训练屏的组件，休息屏上会撑高整页。 */
+.resting-screen.visual-session .visual-cues,
+.resting-screen.visual-session .visual-photo-reference { display:none; }
+/* 小屏（320×568、iPhone SE 一代）上休息屏内容会超出，整屏滚动可看，倒计时环缩一档。 */
+@media (max-height:700px) {
+  .resting-screen.visual-session { padding:64px 17px 130px; gap:12px; }
+  .resting-screen.visual-session .rest-console .tm-ring { width:132px!important; height:132px!important; }
+  .resting-screen.visual-session .rest-console .tm-ring strong { font-size:46px; }
+}
+/* 热身 / 放松（timedPhase）：原来是 hero 贴顶 + 倒计时 absolute 钉在右下角，
+   中间 600px 全空，时间还飘在屏幕角落。改成竖排：标题在上、倒计时在中间当主角、
+   操作固定在底部托盘。 */
+.visual-timed-screen.visual-session {
+  display:flex; flex-direction:column; gap:14px;
+  padding:84px 17px 156px;
+}
+.visual-timed-screen .hero { position:static; margin:0; padding:0; order:1; }
+.visual-timed-screen .hero h1 { font-size:27px; line-height:1.15; margin:4px 0 6px; letter-spacing:-.02em; }
+.visual-timed-screen .hero p { font-size:12px; line-height:1.5; color:var(--muted); margin:0 0 10px; }
+.visual-timed-screen .hero .voice-status { font-size:11px; margin:0 0 4px; }
+.visual-timed-screen .hero .voice-caption { font-size:13px; line-height:1.5; margin:0 0 10px; }
+.visual-timed-screen .hero #mic { min-height:36px; font-size:12px; padding:6px 12px; border-radius:999px; }
+.visual-timed-screen .player { display:contents; }
+
+.visual-timed-screen .timer {
+  position:static; order:2; margin:auto 0; align-self:center;
+  display:flex; align-items:baseline; justify-content:center; gap:6px;
+  font-size:86px; font-weight:800; letter-spacing:-.04em; line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.visual-timed-screen .timer span, .visual-timed-screen .timer #seconds { color:var(--ink); }
+.visual-timed-screen .timer small { font-size:20px!important; font-weight:600; color:var(--muted); }
+/* 教练念出来的那句和上面那句说明是同一个意思，读出来之后就不要再写一遍。 */
+.visual-timed-screen .hero:has(.voice-caption:not(:empty)) > p { display:none; }
+
+/* 底部两个按钮沿用 .visual-session .tm-footer 的托盘样式，这里只保证它们在纸上。 */
+.visual-timed-screen .player .actions {
+  position:fixed; left:50%; transform:translateX(-50%);
+  bottom:calc(20px + env(safe-area-inset-bottom));
+  width:calc(min(100vw,390px) - 48px);
+  display:flex; flex-direction:row; gap:7px; z-index:10;
+  background:#33213de8; border:1px solid #76607f; border-radius:22px;
+  padding:14px 10px 10px;
+}
+.visual-timed-screen .player .actions::before {
+  content:""; position:absolute; top:7px; left:calc(50% - 17px);
+  width:34px; height:3px; border-radius:4px; background:#b79cc5; opacity:.6;
+}
+.visual-timed-screen .player .actions button { flex:1; min-width:0; height:46px; font-size:13px; border-radius:14px; }
+
+@media (max-height:700px) {
+  .visual-timed-screen.visual-session { padding:60px 17px 130px; gap:10px; }
+  .visual-timed-screen .timer { font-size:64px; }
+}
+/* 完成屏底部原来三个整宽按钮竖排吃掉 180px，还把"记录本次训练感受"那栏压在底下。
+   两个次要操作并排一行，主操作（回首页）独占一行。 */
+.visual-summary .tm-footer { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:14px; }
+.visual-summary .tm-footer>button { width:100%; height:44px; min-height:44px; font-size:13px; border-radius:14px; }
+.visual-summary .tm-footer>#summary-home { grid-column:1 / -1; height:48px; min-height:48px; }
+.visual-summary { padding-bottom:170px; }
+/* 320×568 上 250px 的完成页头图占了近一半屏，压到 190px。 */
+@media (max-height:700px) {
+  .visual-summary>.visual-scene, .visual-summary>.visual-shade { height:190px; }
+  .visual-summary>.tm-header { padding-top:112px; }
+}
+/* 底部托盘原来半透明，短屏上滚过的正文会从按钮缝里透出来像重影。完成屏给实底。 */
+.visual-summary .tm-footer {
+  background:linear-gradient(180deg,#1b1620f2 0%,#121015 42%);
+  box-shadow:0 -10px 24px #0b090ecc; border-radius:22px 22px 0 0;
+}

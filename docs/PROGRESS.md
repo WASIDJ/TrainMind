@@ -504,3 +504,31 @@
 **教训**：按**名字**映射动作图是不可靠的——`Chair_Squat` 这种同名条目形态可以完全不同。以后加映射必须**看图**，不能看 id。
 
 **仍未做**：社区页、训练屏（组内/休息/完成）还沿用旧版式；`docs/ui-review/approved-integration/` 仍是来源不明的未跟踪目录。
+
+## 三十、训练屏逐屏重做：组内 / 暂停 / 休息 / 热身放松 / 完成（2026-11-11）
+
+**背景**：用户说"比之前好多啦，真棒，继续优化吧"，继续按同四条规则（每屏一个主角 / 字段只出现一次 / 强调色只给按钮和关键数字 / 留白主动设计）把剩下五屏推一遍。这五屏原来的共同毛病是同一套：**每块都用 absolute 各自钉在屏幕某个位置**，于是 390×844 上要么中间空出三百像素，要么底部几块叠在一起，换个屏幕高度就全乱。全部改成**竖排流式**（flex column + order + gap），留白由 `margin:auto` 与 `justify-content:safe center` 主动分配。
+
+**逐屏改动**：
+
+1. **组内屏**：`第 1 组 / 共 1 组` → `第 1 / 1 组`；环内小字补上负荷（`本组目标 · 8 次 · 自重`）；`.set-prescription` 与环内数字重复，文字版式下隐藏；教练卡 `order:5; margin-top:auto` 推到托盘上方。
+2. **暂停屏**：四块 absolute → 竖排居中（`padding:0 17px 145px`）。环在暂停屏本来就是隐藏的（既有设计）。
+3. **休息屏**：倒计时环被教练卡压住、标题与"已完成 1/1 组"叠字 → 竖排：进度条贴顶、标题、环（168px）、下一组卡、三个操作、教练卡、语音工具。另修 `image` 为 null 时仍 `photo.src = null` 留下的破图。
+4. **热身/放松屏**：原来标题贴顶、倒计时 58px 钉在右下角、中间空 600px → 倒计时居中当主角（86px，小屏 64px），底部操作固定托盘。
+5. **完成屏**：原来整屏铺教练照片、正文从 240px 起、卡片半透明压照片、底部三个整宽按钮盖住"教练复盘" → 照片只做 250px 页眉带，正文落回实底，按钮改"两小一大"（两个次要并排、回首页跨列）。
+
+**顺带修的三个真 bug**：
+
+- **热身屏倒计时数字发灰**：截图里像素是 (174,171,176)，但 computed color 是 `rgb(246,243,248)`。根因是 `.visual-session.visual-text-first::before` 那条四角压暗渐变（`inset:0`、auto z-index）压在文字上面。加 `z-index:-1` 修好。定位手法：把颜色改成纯红重截，如果红色同样被压暗，就不是颜色算错而是被半透明层盖住。
+- **短场次显示"0 min"**：新增 `durationText(ms)`，不到一分钟显示"N 秒"。
+- **休息屏破图**：见上。
+
+**踩坑记录**（下次改这几屏先看这几条）：
+
+- `.workout-console` 是 `display:contents`，给它加 `order` 无效，要加在 `.tm-ring` 上。
+- `.tm-ring` 从 absolute 改 relative 时**必须显式写 `left:auto;right:auto;top:auto;bottom:auto`**：继承的 `bottom:224px` 会把它往上顶；而且环内 `<svg position:absolute inset:0>` 在计算定位的祖先下会撑成整屏巨环；环还有 `width:clamp(164px,49vw,218px)` 一类视口尺寸，要写死像素。
+- `justify-content:center` 在内容超高时会让顶部溢出到负坐标，用 `safe center`。
+- 暂停屏同时带 `.paused-screen` 与 `.visual-session.visual-text-first` 两个类，后者 padding 会盖掉前者，选择器要写到 `.paused-screen.visual-session` 这个同权重更靠后的位置。
+- 清理旧 absolute 规则时误删过 `.visual-session .tm-footer` 的三行（底部按钮因此竖排），已加回 public/visual-design.css:173-175。
+
+**验证**：`npm test` **377 项 / 376 过 / 1 skip / 0 败**。全流程 CDP 截图（390×844 dpr2 + 320×568）逐屏检查横向溢出，home 屏只有建议气泡横向滑动条一项（预期），其余全部为空；休息屏 3 组课、暂停屏、完成屏都实截确认。

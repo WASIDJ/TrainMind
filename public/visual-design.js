@@ -203,7 +203,9 @@
       const target = root.querySelector('.workout-console .tm-ring');
       if (target) head.append(target);
     }
-    if (root.matches('.resting-screen')) {
+    if (root.matches('.resting-screen') && image) {
+      // 2026-11-11：image 为 null（该动作没有可信照片）时原来仍 `photo.src = null`，
+      // 结果是一张破图挂在"下一组"卡片左上角。没有图就什么都不加。
       const next = root.querySelector('.rest-card');
       if (next && !next.querySelector('img')) {
         const photo = document.createElement('img');
