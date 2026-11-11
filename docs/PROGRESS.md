@@ -365,13 +365,12 @@
 | id/handle 固定、先删后插 | 可重复重造，不会越跑越多；已实跑两次验证幂等 |
 | 显式删子表不用 ON DELETE CASCADE | `PRAGMA foreign_keys` 不开时级联不发生，会留下悬空帖子让 feed 500 |
 
-**验证**：`node tools/demo-community-seed.ts` dry-run 报告正确；`TRAINMIND_APPLY=1` 写入后连跑第二次仍然 6/6/30/18/2；`GET /api/community/feed` 返回 6 条且作者可解析；浏览器 `/community` 实测渲染正常（首条是"练了三次月…12 次"）。
 **验证**：`node tools/demo-community-seed.ts` dry-run 报告正确；`TRAINMIND_APPLY=1` 写入后连跑第二次仍然 6/6/30/18/2；`GET /api/community/feed` 返回 6 条且作者可解析；浏览器 `/community` 实测渲染正常（首条是"练了三个月…12 次"）。
 **已知遗留（不是本次引入）**：社区页右下角"分享此刻"胶囊和帖子底部那行文字重叠；属另一条前端工作线，未动。
 
 **未做**：不碰 `demo-investor` 的训练数据；社区里没给演示用户造假关注数。
 
-## 二十四、周容量目标冻结（2026-11-10）
+## 二十四-B、周容量目标冻结（2026-11-10）
 
 **起因**：上一轮结尾把"`weeklySetsRemainingByPattern` 算出来但从不读"列成下一件事，准备接进容量分配。owner 觉得方向不对，要求先列前因后果去外部求证。
 
