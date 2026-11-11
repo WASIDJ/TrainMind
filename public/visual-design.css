@@ -490,3 +490,110 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
    强调色留给"没练完"这种真正需要看一眼的行。 */
 .record-ring[style*="--pct:100"] { background:conic-gradient(#4b4356 100%, #3a3243 0); }
 .record-ring[style*="--pct:100"] em { color:#8d8099; }
+
+/* 我的训练档案（2026-11-11）：身份卡 → 数字 → 设置列表，三级不同权重 */
+.profile-body { display:flex; flex-direction:column; gap:14px; }
+.profile-identity {
+  display:grid; grid-template-columns:52px 1fr auto; align-items:center; gap:13px;
+  padding:16px; border-radius:18px; background:#221d28; border:1px solid #ffffff10;
+}
+.pi-portrait { width:52px; height:52px; border-radius:16px; object-fit:cover; object-position:65% 18%; }
+.pi-copy { display:flex; flex-direction:column; gap:5px; min-width:0; }
+.pi-copy strong { font-size:15px; font-weight:620; color:#f8f4fb; }
+.pi-copy small { font-size:11.5px; line-height:1.55; color:#a99cb4; }
+.pi-image {
+  align-self:flex-start; background:transparent; border:0; padding:2px 0;
+  font-size:10px; color:#7d7189; letter-spacing:.02em; white-space:nowrap;
+}
+.profile-numbers {
+  display:flex; align-items:baseline; gap:18px; padding:0 4px;
+  border-top:1px solid #ffffff0f; border-bottom:1px solid #ffffff0f;
+}
+.profile-numbers { padding-top:14px; padding-bottom:14px; }
+.profile-numbers>div { display:flex; align-items:baseline; gap:3px; }
+.profile-numbers strong { font-size:30px; font-weight:660; color:#fff; letter-spacing:-.03em; line-height:1; }
+.profile-numbers span { font-size:11px; color:#8d8099; }
+.profile-numbers>small { margin-left:auto; font-size:10px; color:#6f6479; }
+
+/* 设置项合成一张列表，每项一行——不再一项一张卡 */
+.profile-settings { border-radius:18px; background:#221d28; border:1px solid #ffffff10; overflow:hidden; }
+.prow {
+  display:grid; grid-template-columns:1fr auto; align-items:center; gap:6px 12px;
+  padding:14px 16px; border-top:1px solid #ffffff0f;
+}
+.prow:first-child { border-top:0; }
+.prow-label { font-size:12px; color:#8d8099; }
+.prow-value { font-size:14px; color:#f2ecf6; text-align:right; }
+.prow-more { grid-column:3; justify-self:end; background:transparent; border:0; padding:2px 0 2px 10px; font-size:11px; color:#a99cb4; white-space:nowrap; }
+.prow:has(.prow-more) { grid-template-columns:auto 1fr auto; }
+.prow-switch { grid-template-columns:1fr auto auto; background:#221d28; border:1px solid #ffffff10; border-radius:18px; width:100%; text-align:left; font:inherit; }
+.prow-switch .prow-value { font-size:12px; color:#8d8099; }
+.prow-switch .chevron { color:#5f5568; font-size:18px; line-height:1; }
+
+.profile-data { display:flex; flex-direction:column; gap:10px; padding:16px; border-radius:18px; background:#221d28; border:1px solid #ffffff10; }
+.pd-head { display:flex; flex-direction:column; gap:5px; }
+.pd-head strong { font-size:14px; color:#f2ecf6; }
+.pd-head small { font-size:11px; line-height:1.6; color:#8d8099; }
+.profile-data .data-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.profile-legal { font-size:10px; line-height:1.7; color:#6f6479; padding:0 4px; }
+
+/* 课程进度（2026-11-11）：从"蜿蜒小路+圆形关卡"改成左轴竖排时间轴。
+   6 场从 800px 竖向高度压到约 300px，一屏能看到"走到哪、下一场从哪开始"。 */
+.course-map { display:flex; flex-direction:column; gap:18px; }
+.course-region { display:flex; flex-direction:column; gap:0; }
+.week-head { display:flex; align-items:center; gap:11px; padding:0 2px 8px; }
+.week-no { font-size:12px; font-weight:700; color:#5f5568; letter-spacing:.04em; font-variant-numeric:tabular-nums; }
+.week-head>div { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
+.week-head strong { font-size:14px; font-weight:620; color:#f2ecf6; }
+.week-head small { font-size:10.5px; color:#7d7189; }
+.week-tag { font-size:9.5px; color:#8d8099; border:1px solid #3a3243; border-radius:999px; padding:3px 8px; }
+.week-tag.now { color:#1c2105; background:#e6ff00; border-color:#e6ff00; font-weight:700; }
+.course-region.is-current .week-head strong { color:#fff; }
+
+.lesson-list { list-style:none; margin:0; padding:0 0 0 4px; }
+.lesson {
+  display:grid; grid-template-columns:22px 1fr; align-items:center; gap:12px;
+  position:relative; padding:9px 0;
+}
+/* 左轴：点与点之间一条细线 */
+.lesson::before {
+  content:''; position:absolute; left:10px; top:0; bottom:0; width:1px; background:#ffffff14;
+}
+.lesson:first-child::before { top:50%; }
+.lesson:last-child::before { bottom:50%; }
+.lesson-dot {
+  position:relative; z-index:1; width:21px; height:21px; border-radius:50%;
+  display:grid; place-items:center; background:#17151b; border:1.5px solid #3a3243; color:#5f5568;
+}
+.lesson-dot svg { width:11px; height:11px; }
+.lesson-done .lesson-dot { border-color:#4b5a2c; color:#a9c93f; }
+.lesson-next .lesson-dot { width:26px; height:26px; margin-left:-2.5px; background:#e6ff00; border-color:#e6ff00; color:#1c2105; }
+.lesson-next .lesson-dot svg { width:13px; height:13px; }
+
+.lesson-main {
+  display:flex; flex-direction:column; gap:3px; min-width:0;
+  text-align:left; background:transparent; border:0; padding:0; font:inherit; color:inherit; width:100%;
+}
+.lesson-main strong { display:flex; align-items:center; gap:7px; font-size:14px; font-weight:600; color:#f2ecf6; }
+.lesson-main strong em {
+  font-style:normal; font-size:9.5px; font-weight:700; color:#1c2105;
+  background:#e6ff00; border-radius:999px; padding:2px 7px;
+}
+.lesson-main small { font-size:11px; color:#7d7189; }
+.lesson-locked .lesson-main strong { color:#a99cb4; }
+.lesson-next .lesson-main strong { color:#fff; font-weight:650; }
+.lesson-next .lesson-main small { color:#a9c93f; }
+
+.course-destination {
+  display:flex; flex-direction:column; gap:4px; padding:14px 16px;
+  border-radius:16px; border:1px dashed #3a3243; text-align:center;
+}
+.course-destination strong { font-size:13px; color:#a99cb4; }
+.course-destination p { margin:0; font-size:11px; color:#6f6479; }
+
+/* 打卡日历（2026-11-11）：原来点亮格是豆绿 #c8f560、空格是深色底上几乎看不见的 rgba(0,0,0,.07) */
+.checkin-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-top:10px; }
+.checkin-cell { width:100%; aspect-ratio:1; border-radius:6px; background:#2a2431; }
+.checkin-cell.on { background:#e6ff00; }
+.checkin-cell.today { box-shadow:0 0 0 1.5px #e6ff0055; }
+.checkin-cell.today.on { box-shadow:0 0 0 2px #ffffff55; }

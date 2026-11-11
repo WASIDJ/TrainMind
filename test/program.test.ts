@@ -32,7 +32,9 @@ test("program: status is driven by completed sessions only", () => {
   assert.equal(s0.weekNumber, 1);
   assert.equal(s0.nextSession!.id, p.sessions[0]!.id);
   assert.equal(s0.percent, 0);
-  assert.match(s0.text, /第 1 周 · 起步 · 已完成 0\/4 场/);
+  assert.match(s0.text, /第 1 周 · 起步/);
+  assert.equal(s0.completedSessions, 0);
+  assert.equal(s0.totalSessions, 4);
 
   // 计划里有 4 场,但只完成了 2 场 → 进度就是 2/4,不提前进入下一周
   const two = recordCompletion(recordCompletion(p, { programSessionId: p.sessions[0]!.id, workoutSessionId: "w1", completedAt: "2026-10-01T10:00:00Z" }), { programSessionId: p.sessions[1]!.id, workoutSessionId: "w2", completedAt: "2026-10-02T10:00:00Z" });
@@ -141,7 +143,11 @@ test("server: program session links plan to execution and only counts completed 
     const active = await get(`/api/programs/active?userId=${userId}`);
     assert.equal(active.status.completedSessions, 1);
     assert.equal(active.status.nextSession.id, program.sessions[1].id);
-    assert.match(active.status.text, /已完成 1\/2 场/);
+    // 2026-11-11：status.text 只留"第几周·阶段名"，数字交给 completedSessions/totalSessions
+    assert.match(active.status.text, /^第 \d+ 周 · /);
+    assert.doesNotMatch(active.status.text, /已完成/);
+    assert.equal(active.status.completedSessions, 1);
+    assert.equal(active.status.totalSessions, 2);
     const completion = active.program.completions[0];
     assert.ok(completion.planned.length > 0, "计划快照留存(计划)");
     assert.ok(completion.measuredSets > 0, "实测组数单独记录(执行)");

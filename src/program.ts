@@ -143,7 +143,10 @@ export function programStatus(program: Program): ProgramStatus {
     totalSessions,
     percent: totalSessions ? Math.round((completedSessions / totalSessions) * 100) : 0,
     nextSession,
-    text: `第 ${weekNumber} 周 · ${chapter} · 已完成 ${completedSessions}/${totalSessions} 场`,
+    // 2026-11-11：这句原来固定拼"已完成 6/12 场"，而课程卡右上角已经有一个"6 / 12 场"，
+    // 进度条也表达同一件事——同一句话在卡片里说了三遍。现在这里只留"现状"（第几周、这一阶段叫什么），
+    // 数字交给右上角和进度条。
+    text: `第 ${weekNumber} 周 · ${chapter}`,
   };
 }
 
