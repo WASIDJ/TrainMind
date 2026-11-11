@@ -373,3 +373,45 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
 .data-dialog-md .md-figure { margin:10px 0; }
 .data-dialog-md .md-figure img { width:100%; max-height:230px; object-fit:contain; border-radius:12px; background:#faf7f3; }
 .data-dialog-md .md-figure figcaption { font-size:11px; color:#b9a9c6; margin-top:5px; }
+
+/* 动作参考卡（free-exercise-db：每个动作起始/结束两帧，850×567 横图）
+   有照片时也用竖排流式版式，照片卡插在处方与要点之间，不再铺满全屏背景。 */
+.visual-session.visual-photo-card {
+  display:flex; flex-direction:column; gap:14px;
+  padding:96px 17px 176px;
+  justify-content:flex-start;
+  background:radial-gradient(120% 90% at 70% 0%,#2a2233 0%,#17131d 55%,#0e0b12 100%);
+}
+.visual-session.visual-photo-card .workout-head,
+.visual-session.visual-photo-card .workout-console,
+.visual-session.visual-photo-card .set-prescription,
+.visual-session.visual-photo-card .visual-photo-reference,
+.visual-session.visual-photo-card .visual-cues,
+.visual-session.visual-photo-card .coach-card,
+.visual-session.visual-photo-card .training-voice-tools {
+  position:static; left:auto; right:auto; top:auto; bottom:auto; margin:0; width:auto;
+}
+.visual-session.visual-photo-card > .visual-session-progress { position:absolute; top:16px; left:17px; right:17px; }
+.visual-session.visual-photo-card .workout-head { order:1; padding-right:82px; }
+.visual-session.visual-photo-card .workout-head h1 { font-size:34px; line-height:1.05; margin:8px 0 6px; }
+.visual-session.visual-photo-card .workout-head .exit { top:0; right:0; }
+.visual-session.visual-photo-card .workout-console { order:2; }
+.visual-session.visual-photo-card .workout-console>.tm-ring { display:block; width:auto; height:auto; aspect-ratio:auto; margin:2px 0 0; background:none; text-align:left; }
+.visual-session.visual-photo-card .workout-console .tm-ring>svg { display:none; }
+.visual-session.visual-photo-card .workout-console .tm-ring-copy { display:flex; align-items:baseline; gap:7px; }
+.visual-session.visual-photo-card .workout-console .tm-ring strong { font-size:42px; color:#e6ff00; line-height:1; }
+.visual-session.visual-photo-card .workout-console .tm-ring small { font-size:12px; color:#cdbdd8; }
+.visual-session.visual-photo-card .set-prescription { order:3; flex-wrap:wrap; }
+.visual-session.visual-photo-card .visual-photo-reference { order:4; margin:0; }
+.visual-session.visual-photo-card .visual-cues { order:5; }
+.visual-session.visual-photo-card .coach-card { order:6; }
+.visual-session.visual-photo-card .training-voice-tools { order:7; }
+.visual-session.visual-photo-card .training-voice-tools>summary { justify-content:flex-start; }
+
+.visual-photo-shots { position:relative; display:flex; gap:6px; }
+.visual-photo-shots img { width:calc(50% - 3px); aspect-ratio:3/2; object-fit:cover; border-radius:10px; background:#241c2c; }
+.visual-photo-caption {
+  position:absolute; left:8px; top:8px; font-size:10px; font-weight:800; letter-spacing:.06em;
+  padding:4px 8px; border-radius:99px; background:#0e0b12cc; color:#e6ff00;
+}
+.visual-photo-reference figcaption { margin-top:8px; font-size:12px; color:#bda9c9; }

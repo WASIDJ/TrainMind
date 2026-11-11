@@ -530,8 +530,26 @@ function workoutIcon(ex){
   // RepDB 免费档:先用**静态起始帧**(owner 2026-11-09 决定"先用静止的")。
   // 顶点帧已一并拉取,将来要换成交替/付费动画时直接改这里即可。
   const id=ex&&(ex.exerciseId||ex.id);
-  if(ex&&ex.attributionRequired&&id)return '<span class="tm-anim" aria-hidden="true"><img src="/media/repdb/'+esc(id)+'-start.webp" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'"></span>';
+  // 2026-11-11：素材改用 free-exercise-db（Unlicense，可商用可再分发），
+  // 由 /media/freedb-media.json 提供"动作 id → 两帧照片"的映射；没有对应照片的动作保留矢量图标。
+  const frames=freedbFrames(id);
+  if(frames)return '<span class="tm-anim" aria-hidden="true"><img src="'+esc(frames[0])+'" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'"></span>';
   return '<span class="workout-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M7 12h10M7 7v10M17 7v10M3 9v6M21 9v6M3 12h4m10 0h4"/></svg></span>'}
+// 动作照片映射（free-exercise-db，Unlicense）。异步加载、缓存；加载完成前一律返回 null，
+// 于是先渲染矢量图标，图到齐后由 visual-design.js 的 observer 重绘——不会出现破图。
+let freedbMap=null;
+function freedbFrames(id){
+  if(!id||!freedbMap)return null;
+  return freedbMap[id]||null;
+}
+(function loadFreedbMap(){
+  fetch('/media/freedb-media.json').then(r=>r.ok?r.json():null).then(data=>{
+    if(!data||!data.frames)return;
+    freedbMap=data.frames;
+    // 映射就绪后重绘当前页，让缩略图换成真实动作照片
+    if(typeof render==='function'&&document.querySelector('#app')?.firstElementChild)render();
+  }).catch(()=>{});
+})();
 const goalNames={back_strength:'背部力量',chest_strength:'胸部力量',upper_body:'上肢力量',lower_body:'下肢力量',general_fitness:'全身力量',mobility:'轻度恢复'};
 async function pauseLifecycleSession(snapshot){
   for(let attempt=0;attempt<3;attempt++){

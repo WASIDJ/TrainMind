@@ -14,14 +14,13 @@
   // 由调用方改用"大字号动作名 + 动作要点"的版式。
   function visualImage(exercise, pack = currentPack()) {
     const id = exercise?.exerciseId ?? exercise?.id;
-    // 1) RepDB 有真实动作静帧：用它（这是"图与动作一致"的唯一可靠来源）
-    if (id && exercise?.attributionRequired) return `/media/repdb/${id}-start.webp`;
-    // 2) 自研动作：只有动作名与照片内容真的对应时才用教练照，其余一律不出图
-    if (pack.id !== 'lin') return null;
-    const name = exercise?.name ?? '';
-    if (/硬拉/.test(name)) return '/coach-media/lin-hinge.jpg';
-    if (/俯卧撑/.test(name)) return '/coach-media/lin-pushup.jpg';
-    if (/深蹲/.test(name)) return '/coach-media/lin-squat.jpg';
+    // 唯一可靠的"图与动作一致"来源：free-exercise-db 里该动作的真实照片。
+    // 没有对应照片就不出图（返回 null），由调用方走"文字优先"版式——
+    // 拿教练封面照兜底会得到"做鸟狗式却整屏硬拉"，比留白更像演示壳。
+    if (id && typeof freedbFrames === 'function') {
+      const frames = freedbFrames(id);
+      if (frames) return frames[0];
+    }
     return null;
   }
 
@@ -191,7 +190,11 @@
     const exercise = workout.exercises[workout.runtime.currentExerciseIndex];
     const image = visualImage(exercise);
     if (image) {
-      backdrop(root, image, image.endsWith('-cover.jpg'));
+      // free-exercise-db 的照片是 850×567 的**横图**，铺成全屏背景会被裁切/留黑边。
+      // 改成"动作参考卡"：横图缩在卡片里完整显示（起始帧 + 结束帧），文字版式照旧。
+      root.classList.add('visual-photo-card');
+      mountCues(root, exercise);
+      mountPhotoCard(root, exercise, image);
     } else {
       // 没有与动作匹配的图：不铺无关照片，改成"大字号动作名 + 动作要点"的版式。
       // 训练屏上铺一张做别的动作的照片，比留白更容易让人一眼看出是演示壳。
@@ -274,6 +277,31 @@
     const codes = exercise?.recommendation?.reasonCodes ?? [];
     for (const code of codes) if (BASIS_TEXT[code]) return BASIS_TEXT[code];
     return null;
+  }
+
+  // 动作参考卡：free-exercise-db 每个动作有起始/结束两帧，横图并排比铺满屏幕更清楚。
+  function mountPhotoCard(root, exercise, image) {
+    if (root.querySelector('.visual-photo-reference')) return;
+    const id = exercise?.exerciseId ?? exercise?.id;
+    const frames = (typeof freedbFrames === 'function' ? freedbFrames(id) : null) ?? [image];
+    const card = document.createElement('figure');
+    card.className = 'visual-photo-reference';
+    const shots = document.createElement('div');
+    shots.className = 'visual-photo-shots';
+    frames.slice(0, 2).forEach((src, index) => {
+      const img = document.createElement('img');
+      img.src = src;
+      img.alt = '';
+      img.loading = 'lazy';
+      shots.append(img);
+      if (index === 0) { const caption = document.createElement('span'); caption.className = 'visual-photo-caption'; caption.textContent = frames.length > 1 ? '起始 → 结束' : '动作参考'; shots.append(caption); }
+    });
+    const note = document.createElement('figcaption');
+    note.textContent = '照这个样子做，动作稳比次数重要。';
+    card.append(shots, note);
+    const preset = root.querySelector('.set-prescription');
+    if (preset) preset.after(card);
+    else root.querySelector('.workout-head')?.after(card);
   }
 
   function decoratePhase() {

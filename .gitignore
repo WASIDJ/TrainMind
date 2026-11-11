@@ -36,3 +36,7 @@ public/media/repdb/
 
 # 用户日报（本地个人数据，不入库）
 reports/
+
+# free-exercise-db 动作照片(2026-11-11)：Unlicense / public domain，
+# 可商用、可修改、可再分发、无需署名 —— 与上面 RepDB 的处置**相反**，这些文件**要入库**，
+# 免得每个克隆都要联网拉一次。重新拉：node tools/fetch-freedb-media.ts

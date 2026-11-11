@@ -537,6 +537,14 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && /^\/media\/repdb\/[a-z0-9][a-z0-9-]*\.webp$/.test(url.pathname)) {
       return sendFile(res, "image/webp", new URL(`../public${url.pathname}`, import.meta.url), "public, max-age=86400");
     }
+    // free-exercise-db 动作照片(2026-11-11,owner 要求换掉 RepDB):Unlicense/public domain,
+    // 可商用、可再分发、无需署名。文件名白名单与 RepDB 同形,避免路径穿越。
+    if (req.method === "GET" && url.pathname === "/media/freedb-media.json") {
+      return sendFile(res, "application/json; charset=utf-8", new URL("../knowledge/freedb-map.json", import.meta.url), "no-cache");
+    }
+    if (req.method === "GET" && /^\/media\/freedb\/[a-z0-9][a-z0-9-]*-[01]\.jpg$/.test(url.pathname)) {
+      return sendFile(res, "image/jpeg", new URL(`../public${url.pathname}`, import.meta.url), "public, max-age=86400");
+    }
     if (req.method === "GET" && url.pathname === "/trainmind-ui.css") return sendFile(res, "text/css; charset=utf-8", new URL("../public/trainmind-ui.css", import.meta.url), "no-cache");
     if (req.method === "GET" && svgAssets.has(url.pathname.slice(1))) return sendFile(res, "image/svg+xml", new URL(`../public/${url.pathname.slice(1)}`, import.meta.url), "public, max-age=86400");
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/community" || (url.pathname === "/experiment" && devPageEnabled))) return sendFile(res, "text/html; charset=utf-8", htmlPath);
