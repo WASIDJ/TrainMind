@@ -90,3 +90,30 @@ owner 要求换掉 RepDB。核对了许可与实际覆盖：
 （顺便把"完整场次组数"这种不通顺的标签改成"已完成场次 / 累计组数"）。
 
 截图：`fresh-records.png`、`fresh-profile.png`。
+
+## 第五批：对话输入条重做 + 手机预览页 Safe Area
+
+用户截图指出首页底部输入框"很丑"。拆开看确实是三个互不相干的东西挤在一行：
+44px 紫色方块「与教练说话」（字号 11px）+ 9px 灰色提示「文字 / 语音，都可以」
++ 44px 荧光黄方块（22px 的 ↑）。三种高度、三种视觉重量，像拼出来的。
+
+改法：
+- 单行输入条：`textarea` 自动增高 + 麦克风**图标**键 + 圆形发送键，同一 36px 基线。
+- 发送键只在有内容时点亮（`.ready`），空态是安静的灰。原来常亮的荧光黄
+  让输入框成为整屏最响的元素，而它其实是最不该抢注意力的。
+- 去掉「文字 / 语音，都可以」——图标本身已经说明了，留着是解释图标在说什么。
+- 底部 `TrainMind · 你的 AI 训练伙伴` 从 9px 降到 8.5px 且更暗，退回页脚。
+
+**连带修掉两个 bug**（都是这次改 DOM 暴露的）：
+1. `public/index.html:397` 原来用 `document.querySelector('#coach-form button')` 取提交键。
+   语音键移到前面后它选中的变成了语音键，把麦克风图标覆盖成 `↑`。
+   改成按 `#home-chat-send` 取，忙碌态用 `.busy` 类 + 转圈，不再改写图标内容。
+2. `voiceUI()` 原先对 `#mic` 直接写 `textContent`（图标会被冲掉）。改成切
+   `.listening` 类 + 更新 `aria-label`/`title`，图标由 `data-keep-icon="1"` 保护。
+
+手机预览页 `public/phone-preview.html`：`.screen` 原来只留了顶部 44px 状态栏，
+底部没留 Safe Area，Home 条压住 App 底部导航的图标行。改成 `padding:44px 0 14px`
++ `box-sizing:border-box`。
+
+截图：`composer-empty.png`（空态）、`composer-typed.png`（有内容，发送键点亮）、
+`phone-preview2.png`（外壳内 Home 条已分离）。

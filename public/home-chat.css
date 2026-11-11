@@ -17,3 +17,48 @@
 @media(max-height:470px){.conversation-welcome .chat-portrait,.conversation-welcome>p{display:none}.conversation-welcome{padding:10px 0}.conversation-bottom .suggestion-heading,.conversation-bottom .service-bubbles{display:none}.conversation-header{padding:0 12px}}
 
 .home-chat-composer textarea:focus-visible{outline:2px solid #e6ff00;outline-offset:3px}
+
+/* 2026-11-11 输入条重做：原来是"44px紫块 + 9px提示文字 + 44px荧光黄块"三种
+   高度与重量混排，像拼出来的。改成单行输入条：图标键 + 自适应输入 + 圆形发送键，
+   发送键只在有内容时点亮。 */
+.home-chat-composer{
+  padding:8px 8px 8px 14px; border-radius:26px;
+  background:#241f2b; border:1px solid #4a3f55;
+  box-shadow:0 6px 20px #0003, inset 0 1px 0 #ffffff0d;
+  transition:border-color .18s ease, box-shadow .18s ease;
+}
+.home-chat-composer:focus-within{border-color:#7a6389; box-shadow:0 8px 24px #0004, inset 0 1px 0 #ffffff12}
+.home-chat-composer form{display:flex; align-items:flex-end; gap:6px}
+.home-chat-composer textarea{
+  flex:1 1 auto; min-width:0; min-height:36px; max-height:104px;
+  padding:8px 0; margin:0; font-size:15px; line-height:1.5; color:#f6f2fa;
+}
+.home-chat-composer textarea::placeholder{color:#8d7f99}
+.composer-actions{display:flex; align-items:center; gap:4px; flex:none}
+.chat-mic-icon{
+  width:36px; height:36px; min-height:36px; padding:0; border:0; border-radius:50%;
+  display:grid; place-items:center; background:transparent; color:#a596b1;
+  transition:color .16s ease, background .16s ease;
+}
+.chat-mic-icon svg{width:19px; height:19px}
+.chat-mic-icon:hover:not(:disabled){background:#ffffff0f; color:#e8dff0}
+.chat-mic-icon.listening{background:#e6ff001f; color:#e6ff00}
+.chat-mic-icon:disabled{opacity:.35}
+#home-chat-send{
+  width:36px; height:36px; min-width:36px; min-height:36px; padding:0; border:0; border-radius:50%;
+  display:grid; place-items:center; background:#3a3243; color:#8d7f99;
+  transition:background .16s ease, color .16s ease, transform .12s ease;
+}
+#home-chat-send svg{width:17px; height:17px}
+#home-chat-send.ready{background:#e6ff00; color:#1c2105}
+#home-chat-send.ready:active{transform:scale(.94)}
+#home-chat-send:disabled{font-size:10px; background:#3a3243; color:#8d7f99}
+/* 底部那行小字回归安静：它是页脚，不该和输入框抢注意力 */
+.chat-status{font-size:9px; color:#7d7189; padding:6px 6px 0; justify-content:center}
+.chat-status:has(#voice-status:empty):has(#voice-caption:empty):has(#home-connection:empty)::after{
+  color:#6f6479; font-size:8.5px; letter-spacing:.12em;
+}
+#home-chat-send.busy{background:#3a3243; color:#8d7f99}
+#home-chat-send.busy::after{content:''; width:14px; height:14px; border-radius:50%; border:2px solid #8d7f99; border-top-color:transparent; animation:tmspin .7s linear infinite}
+#home-chat-send.busy svg{display:none}
+@keyframes tmspin{to{transform:rotate(360deg)}}

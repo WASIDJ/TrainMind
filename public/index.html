@@ -45,7 +45,14 @@ function voiceUI(){
   const labels={idle:'语音提示已开启',starting:'正在申请麦克风…',listening:'正在听你说',permission_denied:'麦克风访问被拒绝',browser_blocked:'内嵌页面限制了麦克风',device_missing:'未找到麦克风',device_busy:'麦克风暂时无法打开',unsupported:'当前无法使用语音输入',coach_error:'教练暂时无法回复',error:'语音暂不可用，可输入文字继续交流',processing:'正在处理你的反馈…',speaking:cadenceActive?'跟练报数':'教练正在说'};
   status.textContent=labels[voiceState]??labels.idle;caption.textContent=voiceCaption||'按自己的节奏做，整组结束后告诉我。';
   if(document.querySelector('.conversation-home')&&voiceState==='idle'){status.textContent='';caption.textContent=voiceCaption||''}
-  const mic=document.querySelector('#mic');if(mic){mic.disabled=!(SpeechRecognitionApi||offlineSpeechAvailable);mic.textContent=voiceState==='listening'?(offlineRecorder?'结束说话':'暂停聆听'):'与教练说话'}
+  // 2026-11-11：语音键改成图标，不能再 write textContent（会把图标冲掉）——改为切换状态类与 aria-label
+  const mic=document.querySelector('#mic');if(mic){mic.disabled=!(SpeechRecognitionApi||offlineSpeechAvailable);
+    const listening=voiceState==='listening';
+    mic.classList.toggle('listening',listening);
+    const label=listening?(offlineRecorder?'结束说话':'暂停聆听'):'用语音和教练聊';
+    mic.setAttribute('aria-label',label);mic.title=label;
+    if(mic.dataset.keepIcon!=='1')mic.textContent=label;
+  }
 }
 async function microphoneFailure(error,token=voiceToken){
   const windows=/Windows/i.test(navigator.userAgent)&&!/Android/i.test(navigator.userAgent),settings=windows?'地址栏的网站权限和 Windows 麦克风设置':'手机浏览器的网站权限和系统应用麦克风权限';
@@ -387,7 +394,9 @@ function updateCoachHistory(){
   }
   const retry=document.querySelector('#retry-coach');if(retry)retry.onclick=()=>handleCoachInput(coachError.input,true,'touch');
   const settings=document.querySelector('#fix-coach-settings');if(settings)settings.onclick=()=>coachSettings(!!workout);
-  const send=document.querySelector('#coach-form button');if(send){send.textContent=coachBusy?'回复中…':document.querySelector('.conversation-home')?'↑':'发送';send.disabled=coachBusy}
+  // 2026-11-11：原来用 '#coach-form button' 取提交键——语音键移到前面后它会选中语音键，
+  // 把麦克风图标覆盖成 "↑"。改成按 id 取提交键；图标键不再改写内部内容，只切忙碌态。
+  const send=document.querySelector('#home-chat-send');if(send){send.disabled=coachBusy;send.classList.toggle('busy',coachBusy)}
   log.scrollTop=log.scrollHeight;
   if(document.querySelector('.conversation-home')){saveHomeConversation();syncHomeConversation()}
 }

@@ -13,7 +13,9 @@
   .phone::before{left:-3px;top:170px;height:56px;box-shadow:0 80px 0 #2b2b30,0 160px 0 #2b2b30}
   .phone::after{right:-3px;top:200px;height:84px}
   .screen{position:relative;width:100%;height:100%;border-radius:44px;overflow:hidden;background:#0d0d10;
-         padding-top:44px}   /* 顶部 44px 留给状态栏，App 内容从下方开始 */
+         /* 顶部 44px 留给状态栏，底部 14px 留给 Home 条——
+            原来只留了顶部，Home 条会压住 App 底部导航的图标行 */
+         padding:44px 0 14px; box-sizing:border-box}
   iframe{width:100%;height:100%;border:0;display:block;background:#fff}
   /* 状态栏叠在应用上方 */
   .status{position:absolute;top:0;left:0;right:0;height:44px;display:flex;align-items:center;
