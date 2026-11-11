@@ -308,11 +308,11 @@ summary { cursor: pointer; }
 .course-trail { position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
 .course-trail path { fill:none; stroke-linecap:round; stroke-linejoin:round; }
 .course-trail-base { stroke:var(--line); stroke-width:11px; }
-.course-trail-done { stroke:#799b4b; stroke-width:7px; }
+.course-trail-done { stroke:var(--accent); stroke-width:7px; opacity:.75; }
 .course-stop { position:absolute; top:var(--stop-y); left:var(--stop-x); transform:translate(-50%,-36px); display:flex; flex-direction:column; align-items:center; width:128px; text-align:center; }
 .course-level { display:grid; place-items:center; flex:none; width:72px; height:68px; min-height:0; padding:19px; border-radius:50%; border:3px solid #4a5846; background:var(--panel); color:#819078; box-shadow:0 7px 0 #303a2e,0 10px 0 5px var(--bg); }
 .course-level svg { width:100%; height:100%; }
-.course-stop-done .course-level { background:#a8d869; color:#263a16; border-color:#b9e880; box-shadow:0 7px 0 #668a36,0 10px 0 5px var(--bg); }
+.course-stop-done .course-level { background:#2b3120; color:var(--accent); border-color:#5c6a2a; box-shadow:0 7px 0 #1b2015,0 10px 0 5px var(--bg); }
 .course-stop-next .course-level { width:80px; height:76px; padding:23px; background:var(--accent); color:var(--accent-ink); border:4px solid #e6ffc0; box-shadow:0 8px 0 #749c36,0 0 0 9px var(--bg),0 0 0 11px #789e45; }
 .course-stop-next .course-level:active:not(:disabled) { transform:translateY(5px); box-shadow:0 3px 0 #749c36,0 0 0 9px var(--bg),0 0 0 11px #789e45; }
 .course-stop-title { color:var(--ink); font-size:13px; font-weight:750; margin-top:16px; background:var(--bg); padding:2px 8px; border-radius:8px; }
