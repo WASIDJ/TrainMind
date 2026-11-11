@@ -8,13 +8,21 @@
   const visualKey = () => 'trainmind-coach-pack:' + userId;
   const currentPack = () => visualPacks.find(pack => pack.id === localStorage.getItem(visualKey())) ?? visualPacks[0];
 
+  // 2026-11-11 审查：此前任何动作都退回教练封面照，于是"鸟狗式"整屏铺着一张
+  // 哑铃硬拉的照片——图与动作对不上，越大的图越像演示壳。
+  // 现在的口径：**只在与动作真的对得上时出图**，对不上就不放照片（返回 null），
+  // 由调用方改用"大字号动作名 + 动作要点"的版式。
   function visualImage(exercise, pack = currentPack()) {
-    if (pack.id !== 'lin') return pack.cover;
+    const id = exercise?.exerciseId ?? exercise?.id;
+    // 1) RepDB 有真实动作静帧：用它（这是"图与动作一致"的唯一可靠来源）
+    if (id && exercise?.attributionRequired) return `/media/repdb/${id}-start.webp`;
+    // 2) 自研动作：只有动作名与照片内容真的对应时才用教练照，其余一律不出图
+    if (pack.id !== 'lin') return null;
     const name = exercise?.name ?? '';
     if (/硬拉/.test(name)) return '/coach-media/lin-hinge.jpg';
     if (/俯卧撑/.test(name)) return '/coach-media/lin-pushup.jpg';
     if (/深蹲/.test(name)) return '/coach-media/lin-squat.jpg';
-    return pack.cover;
+    return null;
   }
 
   function backdrop(root, image, portrait = false) {
@@ -141,10 +149,16 @@
     if (!root.querySelector('.visual-plan-cover')) {
       const cover = document.createElement('div');
       cover.className = 'visual-plan-cover';
-      const image = document.createElement('img');
-      image.src = visualImage(workout.exercises[0]);
-      image.alt = '';
-      cover.append(image);
+      const coverImage = visualImage(workout.exercises[0]);
+      if (coverImage) {
+        const image = document.createElement('img');
+        image.src = coverImage;
+        image.alt = '';
+        cover.append(image);
+      } else {
+        // 没有对得上的动作图：改用纯色渐变，别拿无关照片凑
+        cover.classList.add('visual-plan-cover-plain');
+      }
       const header = root.querySelector('.tm-header');
       cover.append(header);
       root.querySelector('.back-link').after(cover);
@@ -160,10 +174,14 @@
     }
     root.querySelectorAll('.plan-row').forEach((row, index) => {
       const thumb = row.querySelector('.plan-thumb');
-      if (!thumb || thumb.querySelector('.visual-plan-thumb')) return;
+      // RepDB 免费档两帧(起始/顶点)已经画在这个 thumb 里时不要覆盖
+      // (2026-11-09:视觉层原来无条件 replaceChildren,会把动作帧冲掉)
+      if (!thumb || thumb.querySelector('.visual-plan-thumb') || thumb.querySelector('.tm-anim')) return;
+      const src = visualImage(workout.exercises[index]);
+      if (!src) return; // 没有对得上的动作图 → 保留矢量图标（比放一张无关照片诚实）
       const image = document.createElement('img');
       image.className = 'visual-plan-thumb';
-      image.src = visualImage(workout.exercises[index]);
+      image.src = src;
       image.alt = '';
       thumb.replaceChildren(image);
     });
@@ -172,7 +190,14 @@
   function decorateSession(root) {
     const exercise = workout.exercises[workout.runtime.currentExerciseIndex];
     const image = visualImage(exercise);
-    backdrop(root, image, image.endsWith('-cover.jpg'));
+    if (image) {
+      backdrop(root, image, image.endsWith('-cover.jpg'));
+    } else {
+      // 没有与动作匹配的图：不铺无关照片，改成"大字号动作名 + 动作要点"的版式。
+      // 训练屏上铺一张做别的动作的照片，比留白更容易让人一眼看出是演示壳。
+      root.classList.add('visual-text-first');
+      mountCues(root, exercise);
+    }
     sessionProgress(root);
     root.classList.add('visual-session');
     shell.classList.add('visual-training');
@@ -190,6 +215,65 @@
         next.prepend(photo);
       }
     }
+  }
+
+  // 没有动作图时，屏中间会空出一大片。那里本来该是"看着能照着做的提示"，
+  // 而动作要点一直藏在折叠的 <details> 里。这里把要点搬到明面上（复制一份，原折叠保留）。
+  function mountCues(root, exercise) {
+    if (!exercise || root.querySelector('.visual-cues')) return;
+    const lines = (exercise.instructions ?? []).filter(Boolean).slice(0, 3);
+    const box = document.createElement('div');
+    box.className = 'visual-cues';
+    if (lines.length) {
+      const title = document.createElement('span');
+      title.className = 'visual-cues-title';
+      title.textContent = '这一组注意';
+      const list = document.createElement('ol');
+      for (const line of lines) {
+        const li = document.createElement('li');
+        li.textContent = line;
+        list.append(li);
+      }
+      box.append(title, list);
+    }
+    // 剂量依据：把 recommendation 里的机器语言翻成人话（原样贴给用户会看到
+    // "experience_default_calibration" 这种内部标识，2026-11-11 审查）
+    const basis = doseBasis(exercise);
+    if (basis) {
+      const note = document.createElement('p');
+      note.className = 'visual-cues-basis';
+      note.textContent = basis;
+      box.append(note);
+    }
+    if (!box.children.length) return;
+    // 放在"预设条"之后、教练卡之前，正好填住照片移走后留下的区域
+    const preset = root.querySelector('.set-prescription');
+    if (preset) preset.after(box);
+    else root.querySelector('.workout-head')?.after(box);
+  }
+
+  // 剂量依据 → 一句人话。只翻译"这一组为什么是这个数"，不给新数字。
+  const BASIS_TEXT = {
+    no_training_history: "第一次练这个动作，先用一组找合适的强度",
+    experience_default_calibration: "第一次练这个动作，先用一组找合适的强度",
+    familiar_movement_pattern: "同类型动作练过，先保守起步",
+    conservative_transfer_only: "同类型动作练过，先保守起步",
+    capability_stale_over_90_days: "这个动作很久没练了，先重新确认强度",
+    recent_pain_safety_override: "最近这个动作有过疼痛记录，今天避开",
+    recent_survey_fatigue: "最近一次训练反馈偏累，今天少做一点",
+    reported_fatigue: "今天状态偏累，今天少做一点",
+    hard_but_completed: "上次完成但偏吃力，这次先保持",
+    repeated_hard_sessions: "连续两次偏吃力，这次减一组",
+    recent_failed_reps: "上次没做到目标，这次降一档",
+    top_rep_range_reached: "上次做满目标次数，这次略微加重",
+    no_load_increment_available: "没有更重的档位，这次多做一组",
+    hysteresis_hold: "再稳一次，不急着加量",
+    insufficient_evidence_for_progression: "再稳一次，不急着加量"
+  };
+  function doseBasis(exercise) {
+    const codes = exercise?.recommendation?.reasonCodes ?? [];
+    for (const code of codes) if (BASIS_TEXT[code]) return BASIS_TEXT[code];
+    return null;
   }
 
   function decoratePhase() {

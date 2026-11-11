@@ -234,3 +234,104 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
 .visual-week b { width:25px; height:25px; display:grid; place-items:center; border-radius:50%; border:1px solid transparent; font:750 11px/1 Arial,sans-serif; }
 .visual-week [aria-current] b { border-color:#e6ff00; color:#e6ff00; }
 @media (min-width:620px) { .home-fields { grid-template-columns:1fr; } }
+
+.visual-session .workout-head:has(.exit) { display:block; }
+.workout-screen .training-voice-tools { top:228px; bottom:auto; width:auto; max-width:calc(100% - 28px); }
+.workout-screen .training-voice-tools[open] { top:auto; bottom:145px; width:min(calc(100% - 28px),360px); }
+@media (max-height:650px) {
+  .workout-screen .training-voice-tools { top:208px; }
+  .workout-screen .training-voice-tools[open] { top:auto; }
+}
+
+.visual-session .workout-head .tm-ring-copy { width:100%; position:static; margin:0; justify-content:flex-start; transform:none; }
+
+/* 2026-11-11：没有与动作匹配的图时，改用"文字优先"版式。
+   训练/休息屏上铺一张做别的动作的照片（例如做鸟狗式却整屏硬拉），
+   比留白更容易让人一眼看出是演示壳。这里用深色渐变 + 大字号动作名 + 要点。 */
+.visual-session.visual-text-first { background:radial-gradient(120% 90% at 70% 0%,#2a2233 0%,#17131d 55%,#0e0b12 100%); }
+.visual-session.visual-text-first::before {
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(#0c090f00,#0c090f66 70%,#0c090fa8);
+}
+.visual-session.visual-text-first .workout-head { top:78px; }
+.visual-session.visual-text-first .workout-head h1 { font-size:38px; line-height:1.02; margin:10px 0 8px; }
+.visual-session.visual-text-first .workout-head small { font-size:12px; opacity:.85; }
+.visual-session.visual-text-first .visual-session-progress>span { font-size:12px; }
+/* 动作名放大后标题变高，预设条整条下移，避免与环心数字叠在一起（实测 390×844 会压字） */
+.visual-session.visual-text-first .set-prescription { top:232px; }
+@media (max-height:700px) { .visual-session.visual-text-first .workout-head h1 { font-size:32px; } .visual-session.visual-text-first .set-prescription { top:206px; } }
+
+/* 计划封面无图时：纯色渐变，不拿教练照凑数 */
+.visual-plan-cover.visual-plan-cover-plain {
+  background:radial-gradient(120% 100% at 80% 0%,#2e2537 0%,#1a1521 60%,#111012 100%);
+  height:250px;
+}
+
+/* 动作要点上屏（无动作图时填住中间空出来的区域） */
+.visual-session .visual-cues {
+  position:absolute; top:300px; left:17px; right:17px; z-index:2;
+  background:#1b1622a6; border:1px solid #6f5c7a3f; border-radius:12px;
+  padding:14px 16px; backdrop-filter:blur(10px);
+}
+.visual-session .visual-cues-title { display:block; font-size:11px; letter-spacing:.12em; color:#e6ff00; font-weight:800; margin-bottom:8px; }
+.visual-session .visual-cues ol { margin:0; padding-left:18px; display:grid; gap:7px; }
+.visual-session .visual-cues li { font-size:14px; line-height:1.5; color:#e9e0f0; }
+@media (max-height:700px) {
+  .visual-session .visual-cues { top:262px; padding:11px 13px; }
+  .visual-session .visual-cues li { font-size:13px; }
+}
+
+/* 文字优先版式（无动作图）：全部改成竖排流式，不再用绝对定位东拼西凑。
+   绝对定位在"有照片"时是合理的（照片撑满、文字浮在上层），但照片移走后
+   就变成一堆悬空碎片：中间一大片空白、折叠标签孤零零挂在右边。
+   这里按 flex 列排：标题 → 目标数字 → 本组处方 → 动作要点 → 教练 → 底部操作。 */
+.visual-session.visual-text-first {
+  display:flex; flex-direction:column; gap:14px;
+  /* 底部操作托盘是 absolute（固定贴底），不参与 flex；内容在这块空间里竖直居中，
+     短内容就不会在中间留一大片黑，看起来是刻意排版而不是没做完。 */
+  padding:96px 17px 176px;
+  justify-content:flex-start;
+}
+.visual-session.visual-text-first .workout-head,
+.visual-session.visual-text-first .workout-console,
+.visual-session.visual-text-first .set-prescription,
+.visual-session.visual-text-first .visual-cues,
+.visual-session.visual-text-first .coach-card,
+.visual-session.visual-text-first .training-voice-tools {
+  position:static; left:auto; right:auto; top:auto; bottom:auto; margin:0; width:auto;
+}
+/* 屏顶的"已完成 x / y"进度条保持贴顶 */
+.visual-session.visual-text-first > .visual-session-progress { position:absolute; top:16px; left:17px; right:17px; }
+.visual-session.visual-text-first .workout-head { order:1; padding-right:82px; }
+.visual-session.visual-text-first .workout-head h1 { font-size:40px; line-height:1.02; margin:8px 0 6px; }
+.visual-session.visual-text-first .workout-head .exit { top:0; right:0; }
+.visual-session.visual-text-first .workout-console { order:2; }
+.visual-session.visual-text-first .workout-console>.tm-ring { display:block; width:auto; height:auto; aspect-ratio:auto; margin:4px 0 0; background:none; text-align:left; }
+.visual-session.visual-text-first .workout-console .tm-ring>svg { display:none; }
+.visual-session.visual-text-first .workout-console .tm-ring-copy { display:flex; align-items:baseline; gap:7px; }
+.visual-session.visual-text-first .workout-console .tm-ring strong { font-size:44px; color:#e6ff00; line-height:1; }
+.visual-session.visual-text-first .workout-console .tm-ring small { font-size:12px; color:#cdbdd8; }
+.visual-session.visual-text-first .set-prescription { order:3; flex-wrap:wrap; }
+/* 要点按内容高度排，不拉成一个大空盒（空盒子比空白更像没做完）；
+   剩余的纵向空间由 body 留白承担，底部操作继续贴底。 */
+/* 要点紧跟处方，不做 margin-top:auto（那会把它推到底部、中间留一片黑）*/
+.visual-session.visual-text-first .visual-cues { order:4; }
+.visual-session.visual-text-first .visual-cues ol { gap:9px; }
+.visual-session.visual-text-first .visual-cues li { font-size:15px; }
+.visual-session.visual-text-first .coach-card { order:5; }
+.visual-session.visual-text-first .training-voice-tools { order:6; }
+.visual-session.visual-text-first .training-voice-tools>summary { justify-content:flex-start; }
+.visual-session.visual-text-first .set-completion { order:7; }
+.visual-session .visual-cues-basis {
+  margin:12px 0 0; padding-top:11px; border-top:1px solid #6f5c7a45;
+  font-size:12px; line-height:1.55; color:#bda9c9;
+}
+
+/* "滑动完成"的把手要有可拖动的视觉暗示：此前只是一个箭头按钮，
+   用户不会想到可以拖。加一条从左到右的轨道高光 + 右侧提示。 */
+.visual-session .swipe-complete::after {
+  content:"→ 拖动"; position:absolute; right:14px; top:50%; transform:translateY(-50%);
+  font-size:11px; font-weight:700; color:#1a1a1ac4; letter-spacing:.06em; opacity:.75;
+}
+.visual-session .swipe-complete { background:linear-gradient(90deg,#d8ff3f,#e6ff00 55%,#c9e800); }
+.visual-session .swipe-complete #done { box-shadow:0 2px 10px #0000003d; }

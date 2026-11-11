@@ -47,7 +47,25 @@
 .community-post>footer svg { width:17px; height:17px; }
 .community-post>footer .is-liked { color:#edb4c1; }.community-like.is-liked svg { fill:#edb4c1; }
 .community-footer-note { margin-left:auto; font-size:9px; color:#817489; }
-.community-compose { position:fixed; z-index:12; right:max(22px,calc((100vw - 430px)/2 + 20px)); bottom:calc(83px + env(safe-area-inset-bottom)); display:flex; align-items:center; gap:7px; padding:13px 17px; background:var(--accent); color:#17170b; border-radius:24px; box-shadow:0 6px 25px #0008; font-size:12px; min-height:46px; }
+/* 2026-11-11 审查：这个悬浮按钮原来固定在右下（bottom:83px），直接压住帖子正文；
+   改成右下角小圆点后，又压住了帖子右上角的"+ 关注"。
+   结论是"悬浮在内容上"这个做法本身就不成立——列表卡片几乎占满整宽。
+   改法：不再 fixed，改成 community 页头部右上角的常驻按钮，和"我的社区"并排。
+   滚动时它跟页面一起走，永远不遮内容。 */
+.community-compose {
+  position:static; justify-self:end; z-index:auto;
+  display:inline-flex; align-items:center; gap:7px; width:auto; height:auto;
+  padding:12px 16px; min-height:46px;
+  background:var(--accent); color:#17170b; border-radius:23px; box-shadow:0 4px 16px #0006;
+  font-size:12px; font-weight:800;
+}
+.community-compose span { position:static; width:auto; height:auto; overflow:visible; clip-path:none; white-space:nowrap; }
+.community-compose svg { width:18px; height:18px; }
+.community-screen #community-content { padding-bottom:24px; }
+/* 2026-11-11 审查：这个悬浮胶囊压在帖子正文上（PROGRESS 记作"已知遗留"，
+   但客户打开社区第一屏就会看到）。列表底部补出与胶囊等高的安全区，
+   让最后一张卡片不会被遮住，同时胶囊仍然常驻可点。 */
+.community-screen #community-content { padding-bottom:78px; }
 .community-empty { display:flex; align-items:center; flex-direction:column; padding:44px 22px; text-align:center; border:1px dashed #493d52; border-radius:20px; background:#1b1620; }
 .community-empty>svg { width:33px; height:33px; color:#c4d376; margin-bottom:15px; }.community-empty strong { font-size:16px; line-height:1.5; }.community-empty p { font-size:12px; line-height:1.8; margin:10px 0 18px; }.community-empty button { font-size:12px; padding:11px 16px; min-height:40px; }
 .community-status { color:#eff5b4; background:#2a2d1d; border:1px solid #535d2d; padding:11px 13px; border-radius:12px; font-size:12px; line-height:1.7; margin-bottom:12px; }
@@ -64,3 +82,5 @@
 .community-comment { padding:14px 0; border-bottom:1px solid #44384d; }.community-comment p { padding-left:45px; font-size:12px; color:#e4d9ec; line-height:1.8; white-space:pre-wrap; overflow-wrap:anywhere; }.community-comment>button:last-child:not(.community-person-main) { color:#b9a8c6; background:none; padding:4px 0; min-height:25px; font-size:10px; }.community-profile-tools { display:flex; justify-content:space-between; gap:10px; margin-top:20px; }.community-profile-tools button { background:none; color:#b9a8c6; font-size:11px; min-height:35px; padding:8px 0; }.community-profile-posts { margin-top:15px; }
 @media(max-width:350px) { .community-heading h1 { font-size:25px; }.community-heading .eyebrow { font-size:8px; }.community-member-card .community-avatar { display:none; }.community-footer-note { font-size:8px; }.community-dialog-body { padding-inline:14px; }.community-form-grid { grid-template-columns:1fr; }.community-dialog { max-height:calc(100dvh - 24px); }.community-post>header { gap:6px; padding-inline:11px; } }
 @media(prefers-reduced-motion:reduce) { .community-screen button { transition:none; } }
+/* 发布按钮常驻在页头下方一行右对齐，不覆盖任何内容 */
+.community-actions { display:flex; justify-content:flex-end; margin:-6px 0 14px; }

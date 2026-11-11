@@ -63,20 +63,37 @@ for (const plan of PLAN) {
     const session = generateWorkout({ ...context });
     session.sessionId = randomUUID();
     session.userId = userId;
-    // 演示只留第一个动作(3 组),保证结组后能干净收尾(status=completed)
-    session.exercises = [{ ...session.exercises[0]!, sets: 3, completedSets: 0, targetReps: "8-12", executionStatus: "active" }];
+    // 2026-11-11 审查：原来每场只留 1 个动作，记录页于是显示"1 动作 · 100%"，
+    // 客户一眼就看出不是真训练。真实计划是 4-6 个动作，这里保留 4 个（每个 1-2 组），
+    // 并让整场走完（4 个动作 × 各自的组，最后 completeRest 收尾），记录页才是真实结构。
+    const kept = session.exercises.slice(0, 4).map((x, i) => ({
+      ...x,
+      // 第一个动作 2 组（体现"做得起来"），其余各 1 组，总组数控制在 5 组
+      sets: i === 0 ? 2 : 1,
+      completedSets: 0,
+      targetReps: "8-12",
+      executionStatus: i === 0 ? "active" : "pending",
+    }));
+    session.exercises = kept;
     session.experience = { ...(session.experience ?? { mode: "minimal", initialMode: "minimal", experimentGroup: "minimal", topic: "history", talkativeness: "medium", enabled: false, queue: [], currentIndex: 0, currentOffsetSeconds: 0, playback: "idle", contentSkipCount: 0, contentDisabled: false, events: [] }), dataOrigin: seededOrigin() } as never;
 
     startWorkout(session, iso(startMs));
     if (session.status === "warming_up") completeWarmup(session, iso(startMs + 120_000));
     const sets: any[] = [];
     let cursor = startMs + 180_000;
-    for (let setNumber = 1; setNumber <= 3; setNumber++) {
-      markSetComplete(session, iso(cursor));
-      const saved = submitSetFeedback(session, { feedback: "right", actualReps: reps, actualRepsSource: "counted", rir: 2 }, iso(cursor + 60_000));
-      sets.push(saved.record);
-      cursor += 60_000 + 90_000;
-      if (session.status === "resting") completeRest(session, iso(cursor));
+    // 按真实状态机走完整场：结组 → 休息 → 下一个动作，直到没有动作可做。
+    // 原来写死 3 组，只对"1 个动作 3 组"成立；现在动作数变了，循环条件也要跟着走。
+    for (let guard = 0; guard < 30 && session.status !== "completed"; guard++) {
+      if (session.status === "exercise_active") { markSetComplete(session, iso(cursor)); cursor += 60_000; continue; }
+      if (["set_feedback", "resting"].includes(session.status)) {
+        const saved = submitSetFeedback(session, { feedback: "right", actualReps: reps, actualRepsSource: "counted", rir: 2 }, iso(cursor));
+        sets.push(saved.record);
+        cursor += 90_000;
+        if (session.status === "resting") { completeRest(session, iso(cursor)); cursor += 30_000; }
+        continue;
+      }
+      if (session.status === "warming_up") { completeWarmup(session, iso(cursor)); continue; }
+      break;
     }
     session.status = "completed";
     session.runtime.completedAt ??= iso(cursor);

@@ -63,6 +63,16 @@ export function chapterFor(weekNumber: number, totalWeeks: number): string {
 
 const WEEK_FOCUS = ["建立动作模式,重量宁轻", "稳定节奏,推进次数", "加深刺激,尝试加重", "巩固成果,查漏补缺"];
 
+/** 用户说的目标（常常是半句话）→ 课程标题里的名词短语。认不出就用"训练"，不硬编。 */
+export function programGoalName(goal: string): string {
+  const text = String(goal ?? "");
+  if (/下肢|练腿|腿部/.test(text)) return "下肢";
+  if (/上肢/.test(text)) return "上肢";
+  if (/恢复|放松|活动/.test(text)) return "恢复";
+  if (/全身|力量|增肌/.test(text)) return "全身力量";
+  return "训练";
+}
+
 export function buildProgram(opts: {
   programId: string; userId: string; goal: string; weeks: number; sessionsPerWeek: number;
   environment?: string; targetMinutes?: number; title?: string; now?: Date; equipment?: string[];
@@ -100,7 +110,9 @@ export function buildProgram(opts: {
     schemaVersion: "1.0",
     programId: opts.programId,
     userId: opts.userId,
-    title: opts.title ?? `${weeks} 周 ${opts.goal}课程`,
+    // 2026-11-11 审查：title 原来直接拼 goal，而 goal 常常是用户原话（"想练全身"），
+    // 于是课程名显示成"4 周 想练全身课程"——像内部变量漏到界面上。这里按目标映射成名词。
+    title: opts.title ?? `${weeks} 周${programGoalName(opts.goal)}课程`,
     goal: opts.goal,
     environment,
     equipment,

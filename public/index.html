@@ -439,7 +439,9 @@ class WebSpeechTtsProvider{
     this.utterances.add(utterance);
     utterance.onstart=()=>{if(epoch!==this.epoch)return;voiceState='speaking';voiceCaption=text;voiceUI()};
     utterance.onend=()=>{this.utterances.delete(utterance);if(epoch!==this.epoch)return;voiceState='idle';voiceUI();onDone?.();scheduleAutoListen()};
-    utterance.onerror=e=>{this.utterances.delete(utterance);if(epoch!==this.epoch||e.error==='canceled'||e.error==='interrupted')return;voiceLog('tts_error',{error:e.error});voiceState='error';voiceCaption='语音播放失败；可以使用备用按钮继续训练。';voiceUI();scheduleAutoListen()};
+    utterance.onerror=e=>{this.utterances.delete(utterance);if(epoch!==this.epoch||e.error==='canceled'||e.error==='interrupted')return;voiceLog('tts_error',{error:e.error});// 2026-11-11 审查：这句话原文把技术故障（TTS 不可用）直接摆到组内屏上，
+    // 客户看到会以为产品坏了。改为不影响继续训练的中性提示，细节只进 voiceLog。
+    voiceState='idle';voiceCaption='这次没读出声音，按屏幕上的提示继续就行。';voiceUI();scheduleAutoListen()};
     synth.resume();synth.speak(utterance);
   }
   pause(){window.speechSynthesis?.pause()}
@@ -507,6 +509,19 @@ async function showPlanAlternatives(index){
     document.querySelector('#close-alternatives').onclick=preview;document.querySelector('#confirm-alternative').onclick=()=>action('plan_replace',{index,exerciseId:selected});
   }catch(error){alert(error.message)}
 }
+// 2026-11-11 审查：计划页原来把 recommendation.userExplanation 原样贴到教练卡，
+// 于是用户看到"按经验水平的低剂量默认值先做1组校准"——那是写给我们自己看的话。
+// 这里翻成用户能用的说法：只保留"这一场怎么练"的信息。
+function planLead(w){
+  const first=w?.exercises?.[0];
+  if(!first)return '先热身，再逐步发力。按适合你的节奏完成。';
+  const names=w.exercises.slice(0,2).map(x=>x.name).join('、');
+  const more=w.exercises.length>2?' 等 '+w.exercises.length+' 个动作':'';
+  const renaming=/暂无该动作|没有该动作|校准|默认值|覆盖率|capability/i.test(first.recommendation?.userExplanation??'');
+  return renaming
+    ? `今天从${names}${more}开始，每个动作先用一组找合适的强度，不着急加量。`
+    : `今天从${names}${more}开始。${first.recommendation?.userExplanation??''}`;
+}
 function designHeader(section,title,subtitle){return '<header class="tm-header"><div class="eyebrow">'+esc(section)+'</div><h1>'+esc(title)+'</h1><p>'+esc(subtitle)+'</p></header>'}
 const coachAssets={home:['d5f35',125],intent:['39cd6',90],plan:['08af3',85],player:['2df75',105],feedback:['a0f7d',155],rest:['bec5d',115],profile:['97a73',100],summary:['dca19',145],paused:['359a2',120]};
 function designCoach(kind,message){const [asset,size]=coachAssets[kind];return '<div class="tm-coach"><img src="/tm-'+asset+'.svg" width="'+size+'" height="'+size+'" alt="TrainMind 云朵教练"><div class="tm-coach-copy"><small>TrainMind 教练</small><strong>'+esc(message)+'</strong></div></div>'}
@@ -567,7 +582,7 @@ function leaveTrainingView(){pageGeneration++;actionGeneration++;actionBusy=fals
 function preview(){
   document.querySelector('.shell').dataset.view='';
   const recovery=interpretation?.context?.recovery?.overall,description=recovery==='fatigued'||recovery==='very_fatigued'?'今天有些疲劳，已适当降低训练量。':'根据你的状态，安排了'+(goalNames[workout.goal]??'今日')+'训练。';
-  app.innerHTML='<section class="tm-screen plan-screen"><button class="back-link secondary" id="plan-back">← 返回计划</button>'+designHeader('计划',editingPlan?'调整训练计划':'你的今日训练计划',editingPlan?'按你的节奏，调整动作与顺序。':description)+'<div class="tm-stack"><div class="plan-overview">'+designMetric(workout.plannedDurationMinutes+' min','预计时长')+designMetric(workout.exercises.length,'训练动作')+designMetric(labels[workout.intensity]??'适量','强度')+'</div>'+designCoach('plan',workout.exercises[0]?.recommendation?.userExplanation??'先热身，再逐步发力。按适合你的节奏完成。')+(workout.safetyNotes?.length?'<div class="tm-note lavender"><strong>已注意你的身体状态</strong><p>'+esc(workout.safetyNotes[0])+'</p></div>':'')+'<div class="plan-list">'+workout.exercises.map((x,i)=>'<article class="plan-row"><div class="plan-thumb">'+workoutIcon(x)+'</div><div class="plan-info"><strong>'+esc(x.name)+'</strong><small>'+x.sets+' 组 × '+esc(doseText(x))+' · 休息 '+x.restSeconds+' 秒</small></div>'+(editingPlan?'<div class="plan-edit-actions"><button data-plan="up" data-index="'+i+'" '+(i===0?'disabled':'')+'>上移</button><button data-plan="down" data-index="'+i+'" '+(i===workout.exercises.length-1?'disabled':'')+'>下移</button><button data-plan="replace" data-index="'+i+'">替换</button><button data-plan="remove" data-index="'+i+'">删除</button></div>':'<button type="button" class="plan-chevron" data-plan-info="'+i+'" aria-label="查看'+esc(x.name)+'动作要点" aria-expanded="false" aria-controls="plan-detail-'+i+'">›</button>')+'<div id="plan-detail-'+i+'" class="plan-detail" hidden><p>'+esc(doseExplanation(x))+'</p><ol>'+x.instructions.map(line=>'<li>'+esc(line)+'</li>').join('')+'</ol></div></article>').join('')+'</div><details class="plan-voice"><summary>语音提示与训练条件</summary><button id="voice-test">试听语音提示</button><p id="plan-voice-status">开始训练后会播报动作、休息和反馈提示。</p><button id="back-home">修改训练条件</button></details></div><div class="plan-footer"><button class="secondary" id="edit-plan">'+(editingPlan?'完成编辑':'调整计划')+'</button><button id="start">开始训练</button></div></section>';
+  app.innerHTML='<section class="tm-screen plan-screen"><button class="back-link secondary" id="plan-back">← 返回计划</button>'+designHeader('计划',editingPlan?'调整训练计划':'你的今日训练计划',editingPlan?'按你的节奏，调整动作与顺序。':description)+'<div class="tm-stack"><div class="plan-overview">'+designMetric(workout.plannedDurationMinutes+' min','预计时长')+designMetric(workout.exercises.length,'训练动作')+designMetric(labels[workout.intensity]??'适量','强度')+'</div>'+designCoach('plan',planLead(workout))+(workout.safetyNotes?.length?'<div class="tm-note lavender"><strong>已注意你的身体状态</strong><p>'+esc(workout.safetyNotes[0])+'</p></div>':'')+'<div class="plan-list">'+workout.exercises.map((x,i)=>'<article class="plan-row"><div class="plan-thumb">'+workoutIcon(x)+'</div><div class="plan-info"><strong>'+esc(x.name)+'</strong><small>'+x.sets+' 组 × '+esc(doseText(x))+' · 休息 '+x.restSeconds+' 秒</small></div>'+(editingPlan?'<div class="plan-edit-actions"><button data-plan="up" data-index="'+i+'" '+(i===0?'disabled':'')+'>上移</button><button data-plan="down" data-index="'+i+'" '+(i===workout.exercises.length-1?'disabled':'')+'>下移</button><button data-plan="replace" data-index="'+i+'">替换</button><button data-plan="remove" data-index="'+i+'">删除</button></div>':'<button type="button" class="plan-chevron" data-plan-info="'+i+'" aria-label="查看'+esc(x.name)+'动作要点" aria-expanded="false" aria-controls="plan-detail-'+i+'">›</button>')+'<div id="plan-detail-'+i+'" class="plan-detail" hidden><p>'+esc(doseExplanation(x))+'</p><ol>'+x.instructions.map(line=>'<li>'+esc(line)+'</li>').join('')+'</ol></div></article>').join('')+'</div><details class="plan-voice"><summary>语音提示与训练条件</summary><button id="voice-test">试听语音提示</button><p id="plan-voice-status">开始训练后会播报动作、休息和反馈提示。</p><button id="back-home">修改训练条件</button></details></div><div class="plan-footer"><button class="secondary" id="edit-plan">'+(editingPlan?'完成编辑':'调整计划')+'</button><button id="start">开始训练</button></div></section>';
   document.querySelector('#plan-back').onclick=()=>trainingHub(true);
   document.querySelectorAll('[data-plan-info]').forEach(button=>button.onclick=()=>{const detail=document.querySelector('#plan-detail-'+button.dataset.planInfo);detail.hidden=!detail.hidden;button.setAttribute('aria-expanded',String(!detail.hidden));button.textContent=detail.hidden?'›':'⌄'});
   document.querySelector('#back-home').onclick=()=>{const input=workout.rawInput??interpretation?.context?.rawInput??'';editingPlan=false;home(true);document.querySelector('#prompt').value=input;document.querySelector('#prompt').dispatchEvent(new Event('input'))};
