@@ -29,6 +29,11 @@ export interface DailyReportInput {
   bodyMapUrl?: string | null;
 }
 
+const GOAL_LABEL: Record<string, string> = {
+  back_strength: "背部力量", chest_strength: "胸部力量", upper_body: "上肢力量",
+  lower_body: "下肢力量", general_fitness: "全身力量", mobility: "恢复活动",
+};
+
 const STATE_LABEL: Record<MuscleLedgerEntry["state"], string> = {
   just_trained: "今天练过",
   recovering: "恢复中",
@@ -50,7 +55,9 @@ export function buildDailyReport(input: DailyReportInput): string {
   lines.push("## 今天", "");
   if (trained) {
     for (const s of input.todaySessions) {
-      lines.push(`- ${s.extra ? "加练" : "计划"}：${s.minutes} 分钟 · ${s.sets} 组${s.goal ? ` · ${s.goal}` : ""}`);
+      // 2026-11-11：goal 是训练目标枚举（general_fitness / lower_body…），直接拼进日报
+      // 会把 "general_fitness" 这样的内部标识端到用户面前。翻成中文。
+      lines.push(`- ${s.extra ? "加练" : "计划"}：${s.minutes} 分钟 · ${s.sets} 组${s.goal ? ` · ${GOAL_LABEL[s.goal] ?? s.goal}` : ""}`);
     }
     lines.push("", `合计 **${totalMinutes} 分钟 / ${totalSets} 组**。`, "");
   } else {
@@ -64,7 +71,9 @@ export function buildDailyReport(input: DailyReportInput): string {
   lines.push("");
 
   lines.push("## 肌群状态", "");
-  if (input.bodyMapUrl) lines.push(`![今天练了哪](${input.bodyMapUrl})`, "");
+  // 2026-11-11：原来以 "![今天练了哪]" 作图注，前端渲染时这段 alt 文字会作为独立段落再出现一次。
+  // 体图自己的 SVG 里有 "按真实完成的组上色" 的说明，这里不再重复标题。
+  if (input.bodyMapUrl) lines.push(`![](${input.bodyMapUrl})`, "");
   lines.push("| 部位 | 状态 | 近 7 天 | 距上次 |");
   lines.push("|---|---|---|---|");
   for (const m of input.muscles) {
