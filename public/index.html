@@ -925,19 +925,39 @@ async function profilePage(){
   }catch(error){if(screen.isConnected)screen.insertAdjacentHTML('beforeend','<div class="error">'+esc(error.message)+'</div>')}
 }
 // 肌群状态(2026-11-09):账本只读展示。颜色只表达"能不能接着练",不做医疗判断。
+// 2026-11-11：原来每行是"● 腿  本周还没练" + 第二行"腿：还没有记录 · 近7天 0 组"——
+// 同一个词说两遍，第二行还是 12px 半透明，读起来像日志。改成三列列表行：
+// 部位只在第一列出现一次，中间一列说状态，右边一列放大近 7 天的组数。
 async function renderMuscleLedger(screen){
   if(!screen)return;
   try{
     const d=await api('/api/muscles?userId='+encodeURIComponent(userId));
     if(!screen.isConnected||!Array.isArray(d.muscles))return;
-    const tone={just_trained:'#ffb4a2',recovering:'#ffd9c9',recovered:'#b7dfb7',neglected:'#c9b8e8',no_record:'rgba(0,0,0,.12)'};
-    // 主口径是每周次数（同一肌群 2–3 次）；按小时的恢复度只作辅助提示，放第二行弱化显示
-    const rows=d.muscles.map(m=>'<div style="padding:5px 0"><div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;flex:0 0 auto;background:'+(tone[m.state]||'#ddd')+'"></span><span style="width:44px">'+esc(m.label)+'</span><small style="flex:1;opacity:.78">'+esc(m.frequencyText||m.text)+'</small></div><div style="margin-left:18px;opacity:.5;font-size:12px">'+esc(m.text)+' · 近7天 '+m.sets7d+' 组</div></div>').join('');
+    const tone={just_trained:'#ffb4a2',recovering:'#ffd9c9',recovered:'#b7dfb7',neglected:'#c9b8e8',no_record:'#6d6279'};
+    const rowFor=m=>{
+      const freq=m.frequencyText||m.text,detail=m.intervalStatus==='too_soon'?'今天刚练过':(m.recoveryPercent!=null&&m.state!=='no_record'?`恢复 ${m.recoveryPercent}%`:'');
+      return '<div class="muscle-row" data-state="'+esc(m.state)+'">'
+        +'<span class="muscle-dot" style="background:'+(tone[m.state]||'#6d6279')+'"></span>'
+        +'<span class="muscle-name">'+esc(m.label)+'</span>'
+        +'<span class="muscle-status">'+esc(freq)+(detail?'<small>'+esc(detail)+'</small>':'')+'</span>'
+        +'<span class="muscle-sets"><strong>'+(m.sets7d||'—')+'</strong>'+(m.sets7d?'<small>组</small>':'')+'</span>'
+        +'</div>';
+    };
+    // 2026-11-11：没记录的肌群原来各占一行、每行都写"本周还没练"，一屏里有 5 行废话。
+    // 有数字的排在前面（那是这一屏的主角），没记录的整体收成最后一行。
+    const active=d.muscles.filter(m=>m.state!=='no_record'),idle=d.muscles.filter(m=>m.state==='no_record');
+    let rows=active.map(rowFor).join('');
+    if(idle.length)rows+='<div class="muscle-row muscle-row-idle">'
+      +'<span class="muscle-dot" style="background:'+(tone.no_record)+'"></span>'
+      +'<span class="muscle-name">'+esc(idle.map(m=>m.label).join(' · '))+'</span>'
+      +'<span class="muscle-status">这两周都没练</span>'
+      +'<span class="muscle-sets"><strong>—</strong></span>'
+      +'</div>';
     const neg=((d.signals&&d.signals.neglected)||[]).map(g=>(d.muscles.find(x=>x.group===g)||{}).label||g);
     const box=document.createElement('section');box.className='tm-note';box.id='muscle-ledger';
-    box.innerHTML='<strong>肌群状态</strong>'+rows
+    box.innerHTML='<strong>肌群状态</strong><div class="muscle-list">'+rows+'</div>'
       +(neg.length?'<p class="home-suggestion" style="margin-top:6px">被落下：'+esc(neg.join('、'))+'（两周以上没练）</p>':'')
-      +'<p class="home-suggestion" style="margin-top:6px">只按你真实完成的组算（按训练量估算，不是身体测量）。红=今天刚练，橙=还在恢复，绿=可以练，紫=太久没练，灰=没记录。</p>';
+      +'<p class="muscle-legend">只按你真实完成的组算，不是身体测量。红=刚练，橙=恢复中，绿=可以练，紫=太久没练。</p>';
     screen.appendChild(box);
   }catch{}
 }
@@ -981,11 +1001,28 @@ async function recordsPage(){
       document.querySelector('#empty-courses').onclick=()=>trainingHub();
       return;
     }
-    screen.innerHTML=designHeader('记录','训练记录','每一次努力，都值得被看见。')+'<div class="tm-metrics">'+designMetric(sessions.length,'累计训练')+designMetric(minutes+' min','累计时长')+'</div><div class="records-filter"><button class="active" aria-pressed="true" data-filter="all">全部</button><button aria-pressed="false" data-filter="planned">计划内</button><button aria-pressed="false" data-filter="extra">加练</button></div><div class="tm-stack" id="record-list"></div><div class="home-generate"><button id="latest-record">查看最近训练</button><button class="secondary" id="view-progress">查看训练进度</button></div>';
+    // 2026-11-11：上面原来是"累计训练 12 / 累计时长 300 min"两个同权重数字，
+    // 但它们回答的是"我这辈子练了多少"，而不是用户打开这一页想知道的"这周怎么样"。
+    // 改成：本周场次当主角（大字），本月和累计降为一行小字。
+    const now=new Date(),weekStart=new Date(now.getFullYear(),now.getMonth(),now.getDate()-(now.getDay()+6)%7);
+    const week=sessions.filter(x=>new Date(x.record.completedAt)>=weekStart);
+    const month=sessions.filter(x=>{const d=new Date(x.record.completedAt);return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()});
+    const weekMin=Math.round(week.reduce((n,x)=>n+x.record.activeWorkoutMs,0)/60000);
+    const headline='<div class="records-headline"><div class="rh-main"><strong>'+week.length+'</strong><span>场 · 本周</span></div><p class="rh-sub">本月 '+month.length+' 场 · 累计 '+sessions.length+' 场 / '+minutes+' 分钟</p></div>';
+    screen.innerHTML=designHeader('记录','训练记录','每一次努力，都值得被看见。')+headline+'<div class="records-filter"><button class="active" aria-pressed="true" data-filter="all">全部</button><button aria-pressed="false" data-filter="planned">计划内</button><button aria-pressed="false" data-filter="extra">加练</button></div><div class="tm-stack" id="record-list"></div><div class="home-generate"><button id="latest-record">查看最近训练</button><button class="secondary" id="view-progress">查看训练进度</button></div>';
     const list=document.querySelector('#record-list');
     const draw=filter=>{
       const filtered=sessions.filter(x=>filter==='all'||(filter==='extra'?x.workout.kind==='extra':x.workout.kind!=='extra'));
-      list.innerHTML=filtered.length?filtered.map(x=>{const completed=x.workout.exercises.filter(e=>e.completedSets>0).length,total=x.workout.exercises.reduce((n,e)=>n+e.sets,0),sets=x.workout.exercises.reduce((n,e)=>n+e.completedSets,0);return '<button class="tm-row" data-record="'+esc(x.workout.sessionId)+'"><div><strong>'+new Date(x.record.completedAt).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'})+' · '+esc(goalNames[x.workout.goal]??'训练')+'</strong><small>'+Math.round(x.record.activeWorkoutMs/60000)+' 分钟 · '+completed+' 动作 · '+Math.round(sets/Math.max(1,total)*100)+'%'+(x.workout.kind==='extra'?' · 加练':'')+(x.workout.status==='aborted'?' · 提前结束':'')+'</small></div><span class="chevron">›</span></button>'}).join(''):'<div class="tm-empty">'+(filter==='all'?'还没有训练记录。完成训练后，这里会记录你的每次进步。':'没有'+(filter==='extra'?'加练':'计划内')+'的记录，换个筛选看看。')+'</div>';
+      list.innerHTML=filtered.length?filtered.map(x=>{const completed=x.workout.exercises.filter(e=>e.completedSets>0).length,total=x.workout.exercises.reduce((n,e)=>n+e.sets,0),sets=x.workout.exercises.reduce((n,e)=>n+e.completedSets,0),rate=Math.round(sets/Math.max(1,total)*100),when=x.record.completedAt?new Date(x.record.completedAt):null;
+      // 2026-11-11：原来四行长得一模一样——日期和课名同字号，副行塞了"分钟·动作·百分比·加练·提前结束"。
+      // 改成：日期大字成主角，课名次之，右栏一个百分比环，等价信息用更少的字说。
+      return '<button class="record-card" data-record="'+esc(x.workout.sessionId)+'">'
+        +'<div class="record-when"><strong>'+(when?when.getDate():'—')+'</strong><small>'+(when?(when.getMonth()+1)+'月':'')+'</small></div>'
+        +'<div class="record-main"><strong>'+esc(goalNames[x.workout.goal]??'训练')+'</strong>'
+        +'<small>'+Math.round(x.record.activeWorkoutMs/60000)+' 分钟 · '+completed+' 个动作 · '+sets+' 组'
+        +(x.workout.kind==='extra'?' · 加练':'')+(x.workout.status==='aborted'?' · 提前结束':'')+'</small></div>'
+        +'<span class="record-ring" style="--pct:'+rate+'"><em>'+rate+'%</em></span>'
+        +'</button>'}).join(''):'<div class="tm-empty">'+(filter==='all'?'还没有训练记录。完成训练后，这里会记录你的每次进步。':'没有'+(filter==='extra'?'加练':'计划内')+'的记录，换个筛选看看。')+'</div>';
       list.querySelectorAll('[data-record]').forEach(b=>b.onclick=()=>recordDetail(sessions.find(x=>x.workout.sessionId===b.dataset.record)));
     };
     draw('all');document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-filter]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b))});draw(b.dataset.filter)});

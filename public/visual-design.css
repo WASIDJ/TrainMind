@@ -433,3 +433,60 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
 .empty-state-actions button.secondary { background:#ffffff14; color:#eadff0; border:1px solid #ffffff2b; }
 /* 档案页空状态卡整行显示（它落在 .tm-metrics 的两列网格里会被挤成半宽） */
 .profile-screen .empty-state { grid-column:1 / -1; }
+
+/* 肌群账本列表行（2026-11-11）：每行四栏——色点 / 部位 / 状态 / 近7天组数。
+   部位只出现一次；数字单独成列并放大，让"练了多少"一眼可读。 */
+.muscle-list { display:flex; flex-direction:column; margin:4px 0 2px; }
+.muscle-row {
+  display:grid; grid-template-columns:8px 1fr auto auto;
+  align-items:center; gap:10px;
+  padding:11px 0; border-top:1px solid #ffffff0f;
+}
+.muscle-row:first-child { border-top:0; }
+.muscle-dot { width:8px; height:8px; border-radius:50%; }
+.muscle-name { font-size:15px; color:#f2ecf6; letter-spacing:.02em; }
+.muscle-status { display:flex; flex-direction:column; gap:2px; text-align:right; min-width:0; }
+.muscle-status { font-size:12px; color:#a99cb4; line-height:1.4; }
+.muscle-status small { font-size:10px; color:#7d7189; }
+.muscle-sets { display:flex; align-items:baseline; gap:3px; min-width:52px; justify-content:flex-end; }
+.muscle-sets strong { font-size:20px; font-weight:650; color:#fff; letter-spacing:-.02em; line-height:1; }
+.muscle-sets small { font-size:9px; color:#7d7189; }
+.muscle-row[data-state=no_record] .muscle-sets strong { color:#5f5568; }
+.muscle-row[data-state=no_record] .muscle-name { color:#a99cb4; }
+.muscle-row-idle { border-top:1px solid #ffffff0f; }
+.muscle-row-idle .muscle-name { font-size:12px; color:#8d8099; letter-spacing:0; }
+.muscle-row-idle .muscle-status { font-size:11px; color:#6f6479; }
+.muscle-legend { margin:10px 0 0; font-size:10px; line-height:1.6; color:#7d7189; }
+
+/* 记录页头部（2026-11-11）：本周场次当主角，本月/累计降为一行小字 */
+.records-headline { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:2px 2px 14px; }
+.records-headline .rh-main { display:flex; align-items:baseline; gap:6px; }
+.records-headline .rh-main strong { font-size:44px; font-weight:680; line-height:.9; letter-spacing:-.03em; color:#fff; }
+.records-headline .rh-main span { font-size:13px; color:#a99cb4; }
+.records-headline .rh-sub { margin:0; font-size:11px; color:#7d7189; }
+
+/* 记录卡片（2026-11-11）：日期大字 / 课名+摘要 / 完成度环 */
+.record-card {
+  display:grid; grid-template-columns:48px 1fr 46px; align-items:center; gap:14px;
+  width:100%; padding:14px 16px; text-align:left;
+  background:#221d28; border:1px solid #ffffff12; border-radius:16px;
+  color:inherit; font:inherit;
+}
+.record-card:active { background:#2a2431; }
+.record-when { display:flex; flex-direction:column; align-items:center; line-height:1; }
+.record-when strong { font-size:22px; font-weight:650; color:#fff; letter-spacing:-.02em; }
+.record-when small { font-size:9px; color:#7d7189; margin-top:3px; }
+.record-main { display:flex; flex-direction:column; gap:5px; min-width:0; }
+.record-main strong { font-size:15px; font-weight:600; color:#f6f0fa; }
+.record-main small { font-size:11px; color:#9a8ea6; line-height:1.45; }
+.record-ring {
+  width:42px; height:42px; border-radius:50%; display:grid; place-items:center;
+  background:conic-gradient(#e6ff00 calc(var(--pct) * 1%), #3a3243 0);
+  position:relative;
+}
+.record-ring::before { content:''; position:absolute; inset:4px; border-radius:50%; background:#221d28; }
+.record-ring em { position:relative; font-style:normal; font-size:10px; font-weight:650; color:#e8e1ee; }
+/* 满进度不再用强调色：六场都 100% 时六个黄环只会变成噪音，
+   强调色留给"没练完"这种真正需要看一眼的行。 */
+.record-ring[style*="--pct:100"] { background:conic-gradient(#4b4356 100%, #3a3243 0); }
+.record-ring[style*="--pct:100"] em { color:#8d8099; }

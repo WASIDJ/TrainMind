@@ -207,8 +207,8 @@ export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] 
       return {
         group: meta.key, label: meta.label, sets7d: 0, sets28d: 0, measuredSets7d: 0, assumedSets7d: 0,
         lastTrainedAt: null, hoursSince: null, recoveryHours: meta.recoveryHours, recoveryPercent: null, state: "no_record" as const,
-        text: `${meta.label}：还没有记录`,
-        sessions7d: 0, frequencyStatus: "none" as const, frequencyText: `${meta.label}：本周还没练`,
+        text: "还没有记录",
+        sessions7d: 0, frequencyStatus: "none" as const, frequencyText: "本周还没练",
         intervalStatus: "none" as const,
       };
     }
@@ -227,27 +227,29 @@ export function buildMuscleLedger(input: BuildLedgerInput): MuscleLedgerEntry[] 
     if (!hasStrength) {
       // 只有低强度活动：不是"刚练过"，力量动作随时可以安排
       state = "recovered";
-      text = `${meta.label}：今天只有低强度活动，力量训练可以安排`;
+      text = "今天只有低强度活动，力量训练可以安排";
     } else if (days >= NEGLECT_DAYS) {
       state = "neglected";
-      text = `${meta.label}：${Math.floor(days)} 天没练了`;
+      text = `${Math.floor(days)} 天没练了`;
     } else if (hours >= window) {
       state = "recovered";
-      text = `${meta.label}：可以练了（${Math.floor(days) || 1} 天前练过）`;
+      text = `可以练了（${Math.floor(days) || 1} 天前练过）`;
     } else if (hours >= window / 2) {
       state = "recovering";
-      text = `${meta.label}：还在恢复 · 建议明天`;
+      text = "还在恢复 · 建议明天";
     } else {
       state = "just_trained";
-      text = `${meta.label}：今天刚练过 · 建议明天`;
+      text = "今天刚练过 · 建议明天";
     }
     const sessions7d = row.sessions.size;
     const intervalStatus: IntervalStatus = !hasStrength ? "none" : hours < MIN_SAME_MUSCLE_INTERVAL_HOURS ? "too_soon" : "ok";
     const frequencyStatus: FrequencyStatus = sessions7d === 0 ? "none" : sessions7d < WEEKLY_FREQUENCY_TARGET.min ? "below" : sessions7d <= WEEKLY_FREQUENCY_TARGET.max ? "in_range" : "above";
-    const frequencyText = frequencyStatus === "none" ? `${meta.label}：本周还没练`
-      : frequencyStatus === "below" ? `${meta.label}：本周 ${sessions7d} 次（建议每周 ${WEEKLY_FREQUENCY_TARGET.min}–${WEEKLY_FREQUENCY_TARGET.max} 次）`
-      : frequencyStatus === "in_range" ? `${meta.label}：本周 ${sessions7d} 次，正好在该练的次数里`
-      : `${meta.label}：本周 ${sessions7d} 次，已超过 ${WEEKLY_FREQUENCY_TARGET.max} 次，本周先不加量`;
+    // 2026-11-11：这些文案原来每句都以 `${meta.label}：` 开头，前端渲染时
+    // 部位名已经在独立一列，于是同一行里出现两次"腿"。文案只描述状态，部位由调用方提供。
+    const frequencyText = frequencyStatus === "none" ? "本周还没练"
+      : frequencyStatus === "below" ? `本周 ${sessions7d} 次（建议每周 ${WEEKLY_FREQUENCY_TARGET.min}–${WEEKLY_FREQUENCY_TARGET.max} 次）`
+      : frequencyStatus === "in_range" ? `本周 ${sessions7d} 次，正好在该练的次数里`
+      : `本周 ${sessions7d} 次，已超过 ${WEEKLY_FREQUENCY_TARGET.max} 次，本周先不加量`;
     return {
       group: meta.key, label: meta.label, sets7d: row.sets7d, sets28d: row.sets28d,
       measuredSets7d: row.measured7d, assumedSets7d: row.assumed7d,

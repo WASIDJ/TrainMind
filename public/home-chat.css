@@ -62,3 +62,38 @@
 #home-chat-send.busy::after{content:''; width:14px; height:14px; border-radius:50%; border:2px solid #8d7f99; border-top-color:transparent; animation:tmspin .7s linear infinite}
 #home-chat-send.busy svg{display:none}
 @keyframes tmspin{to{transform:rotate(360deg)}}
+
+/* 首页主行动（2026-11-11）：原来"看看下一场练什么"只是 4 个气泡之一，
+   和"安排今天的训练"并列，用户不知道该点哪个。现在它是唯一的实心按钮。 */
+.home-primary {
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  width:100%; min-height:52px; margin:4px 0 14px; padding:0 18px 0 20px;
+  border:0; border-radius:17px; background:#e6ff00; color:#17170b;
+  font-size:15px; font-weight:650; letter-spacing:.01em;
+  box-shadow:0 8px 24px #e6ff0018;
+  transition:transform .12s ease;
+}
+.home-primary:active { transform:scale(.985); }
+.home-primary svg { width:19px; height:19px; flex:none; }
+
+/* 建议气泡（2026-11-11）：从两行两列改成一行横向滑动，
+   不再占用小半屏；样式退成"辅助入口"，不与主行动抢。 */
+.service-bubbles {
+  display:flex; flex-wrap:nowrap; gap:8px; margin-bottom:14px;
+  overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch;
+  padding-bottom:2px; margin-inline:-2px; padding-inline:2px;
+  scroll-snap-type:x proximity;
+}
+.service-bubbles::-webkit-scrollbar { display:none; }
+.service-bubbles button {
+  flex:0 0 auto; min-height:40px; padding:9px 14px; border-radius:999px;
+  border:1px solid #ffffff16; background:#241f2b; color:#cfc4d9;
+  font-size:12px; font-weight:450; gap:7px; scroll-snap-align:start;
+}
+.service-bubbles button>span { font-size:14px; color:#a596b1; }
+.service-bubbles button:hover { background:#2c2634; border-color:#ffffff26; }
+.conversation-home.has-messages .service-bubbles { flex-wrap:nowrap; }
+/* 2026-11-11：欢迎块原来贴顶排，底部剩一大片纯黑死白。
+   改成在可用空间里垂直居中，留白分布到上下两侧，视觉上成为"版面"而不是"没填满"。 */
+.conversation-home:not(.has-messages) .conversation-body { display:flex; flex-direction:column; }
+.conversation-home:not(.has-messages) .conversation-welcome { margin:auto 0; padding:24px 0 8px; }
