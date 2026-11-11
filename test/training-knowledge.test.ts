@@ -173,3 +173,22 @@ test("周容量目标保持冻结：只计算、不参与排课", async () => {
   const workout = await createWorkout("我在Test Gym，有45分钟，中级，想增肌。", "knowledge-frozen-ruleid", new RuleLanguageModelProvider());
   assert.ok(!workout.workout!.prescription.ruleIds.includes("acsm-hypertrophy-weekly-volume-2026"), "处方不能声称应用了冻结的周容量规则");
 });
+
+// 2026-11-11 审查：upper_body 缺 vertical_pull 时会回退到 horizontal_pull，
+// 同一个动作被两个 pattern 各选一次 —— "30分钟，我在家，有哑铃，想练上肢"
+// 会出现"单臂哑铃划船"两次。既有那条"avoid duplicate exercises"只覆盖了
+// beginner 的全身输入，抓不到这个分支。
+test("排课不出现重复动作：upper_body 的 vertical_pull 回退路径", async () => {
+  const inputs = [
+    "30分钟，我在家，有哑铃，想练上肢",
+    "30分钟，我在家，有哑铃，想练上肢，今天肩很酸",
+    "45分钟，我在家，有哑铃，想练全身",
+    "30分钟，我在Test Gym，中级，想增肌",
+    "20分钟，我在办公室，徒手自重，想练全身",
+  ];
+  for (const input of inputs) {
+    const result = await createWorkout(input, "dup-guard", new RuleLanguageModelProvider());
+    const ids = result.workout!.exercises.map(x => x.exerciseId);
+    assert.equal(new Set(ids).size, ids.length, `${input} 排出了重复动作：${ids.join(", ")}`);
+  }
+});

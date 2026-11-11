@@ -40,7 +40,18 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
   width:min(calc(100% - 34px),396px); padding:10px 0 max(12px,env(safe-area-inset-bottom));
   background:#111012ed; box-shadow:0 -7px 20px #111012c9; border-radius:0;
 }
-.shell[data-view=intent] .home-generate { bottom:0; }
+/* 2026-11-11：训练条件面板原来把底部操作栏压到 bottom:0，三个按钮（生成计划 /
+   语音输入 / 导入别人的计划）互相叠在一起并溢出屏幕。现在底部导航恢复显示，
+   操作栏要抬到导航之上，并且三个按钮各自一行，不挤在同一行里相互覆盖。 */
+/* 三个操作按钮固定在底部会盖住"身体状态/训练目标"这两组选择（实测）。
+   这个面板是"填表 → 提交"，操作栏应该跟在表单后面，而不是浮在上面。 */
+.shell[data-view=intent] .home-generate {
+  position: static; transform: none; left: auto; bottom: auto;
+  width: 100%; margin-top: 14px; background: none; padding: 0;
+  flex-direction: column; gap: 8px;
+}
+.shell[data-view=intent] .home-generate > button { width: 100%; }
+.shell[data-view=intent] .home-screen { padding-bottom: calc(120px + var(--safe)); }
 .shell[data-screen=records] .home-generate,.shell[data-screen=profile] .home-generate { position:static; width:100%; transform:none; }
 .home-screen,.records-screen,.profile-screen,.course-screen { padding-bottom:85px; }
 .tm-metric,.tm-row,.tm-profile-row,.tm-empty,.plan-row,.tm-chart,.card,.coach-compose,#summary-survey,.continue-card { background:#211c27; border-color:#44384f; }

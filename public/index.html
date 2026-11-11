@@ -727,6 +727,9 @@ function setNav(tab){
   pageGeneration++;app.scrollTop=0;
   if(tab==='community'||location.pathname==='/community'){const next=new URL(location.href);next.pathname=tab==='community'?'/community':'/';history.replaceState(null,'',next.pathname+next.search+next.hash)}
   if(tab==='training'||tab==='profile')document.querySelector('.shell').dataset.screen='default';
+  // 2026-11-11：从"训练条件"面板切到别的 tab 时，data-view="intent" 必须清掉，
+  // 否则新页面会继承那个面板的底部操作栏定位，出现空档或遮挡。
+  if(document.querySelector('.shell').dataset.view==='intent'&&tab!=='home')document.querySelector('.shell').dataset.view='';
   document.querySelectorAll('[data-tab]').forEach(x=>{const active=x.dataset.tab===tab;x.classList.toggle('active',active);if(active)x.setAttribute('aria-current','page');else x.removeAttribute('aria-current')});
 }
 async function trainingHub(showOverview=false){

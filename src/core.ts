@@ -474,6 +474,13 @@ export function generateWorkout(context: SessionContext, facts: TrainingFacts = 
   const recipe = sessionRecipe(goal, available, context.environment, preferredRecipeId);
   const coverage = [...stimulus.primaryPatterns, ...stimulus.secondaryPatterns] as MovementPattern[];
   const mainDefs = coverage.map(pattern => candidates.filter(x => (x.movementPattern === pattern || goal === "upper_body" && pattern === "vertical_pull" && x.movementPattern === "horizontal_pull") && !selected.has(x.id)).sort((a, b) => Number(b.movementPattern === pattern) - Number(a.movementPattern === pattern) || rank(a) - rank(b))[0]).filter((x): x is Exercise => Boolean(x)).map(x => (selected.add(x.id), x));
+  // 2026-11-11 审查：upper_body 缺 vertical_pull 时会回退到 horizontal_pull，于是同一个
+  // 动作可能被两个 pattern 各选一次（选了也得排除，但"先 map 再加 selected"的顺序让
+  // 第二个 pattern 仍可能选中它）——"30分钟，在家，有哑铃，想练上肢"就会出现
+  // 单臂哑铃划船两次。这里按 exerciseId 去重，保留首次出现的位置。
+  const uniqueMain = mainDefs.filter((def, index) => mainDefs.findIndex(other => other.id === def.id) === index);
+  mainDefs.length = 0;
+  mainDefs.push(...uniqueMain);
   const recipeAccessoryPatterns = context.durationIntent === "target" && available >= 30 ? stimulus.accessoryPatterns : [];
   const preferredAccessories = context.durationIntent === "target" && available >= 30 ? rules.preferredAccessoryPatterns : [];
   const requestedArmPatterns: MovementPattern[] = goal === "chest_strength" && /手臂|arm/i.test(context.rawInput) ? ["arm_curl", "arm_extension"] : [];
