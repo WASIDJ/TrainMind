@@ -272,11 +272,15 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
 .visual-session.visual-text-first .set-prescription { top:232px; }
 @media (max-height:700px) { .visual-session.visual-text-first .workout-head h1 { font-size:32px; } .visual-session.visual-text-first .set-prescription { top:206px; } }
 
-/* 计划封面无图时：纯色渐变，不拿教练照凑数 */
-.visual-plan-cover.visual-plan-cover-plain {
-  background:radial-gradient(120% 100% at 80% 0%,#2e2537 0%,#1a1521 60%,#111012 100%);
-  height:250px;
+/* 计划封面：只放标题和数字，不铺动作照片（2026-11-11）。
+   原来铺"第一个动作的照片"，用户第一眼看到的是与本场无关的动作。 */
+.visual-plan-cover {
+  height:auto !important; margin:0 -17px !important; padding:6px 17px 0;
+  position:static !important; overflow:visible !important;
 }
+.visual-plan-cover::after { display:none !important; }
+.visual-plan-cover .tm-header { position:static !important; margin:0 0 18px !important; }
+.visual-plan-cover h1 { font-size:34px !important; max-width:none !important; letter-spacing:-.04em; }
 
 /* 动作要点上屏（无动作图时填住中间空出来的区域） */
 .visual-session .visual-cues {

@@ -146,18 +146,12 @@
 
   function decoratePlan(root) {
     if (!root.querySelector('.visual-plan-cover')) {
+      // 2026-11-11：封面原来用"第一个动作的照片"铺满整屏。问题是这张照片给出的信息
+      // 和页面标题（今天要练什么）没关系，而真正的信息在下面的动作列表里——
+      // 于是用户第一眼看到的是"一个陌生男人在做绳索弯举"，而本场根本没有这个动作。
+      // 现在封面只放标题和数字；动作照片只出现在它自己那一行的小图上。
       const cover = document.createElement('div');
-      cover.className = 'visual-plan-cover';
-      const coverImage = visualImage(workout.exercises[0]);
-      if (coverImage) {
-        const image = document.createElement('img');
-        image.src = coverImage;
-        image.alt = '';
-        cover.append(image);
-      } else {
-        // 没有对得上的动作图：改用纯色渐变，别拿无关照片凑
-        cover.classList.add('visual-plan-cover-plain');
-      }
+      cover.className = 'visual-plan-cover visual-plan-cover-plain';
       const header = root.querySelector('.tm-header');
       cover.append(header);
       root.querySelector('.back-link').after(cover);

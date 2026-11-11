@@ -3,7 +3,7 @@
   "source": "https://github.com/yuhonas/free-exercise-db",
   "license": "Unlicense",
   "licenseFile": "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/LICENSE.md",
-  "fetchedAt": "2026-11-11T04:03:27.298Z",
+  "fetchedAt": "2026-11-11T08:55:54.046Z",
   "frames": {
     "bodyweight-squat": [
       "/media/freedb/bodyweight-squat-0.jpg",
@@ -29,17 +29,9 @@
       "/media/freedb/reverse-lunge-0.jpg",
       "/media/freedb/reverse-lunge-1.jpg"
     ],
-    "hip-hinge": [
-      "/media/freedb/hip-hinge-0.jpg",
-      "/media/freedb/hip-hinge-1.jpg"
-    ],
     "calf-raise": [
       "/media/freedb/calf-raise-0.jpg",
       "/media/freedb/calf-raise-1.jpg"
-    ],
-    "chair-squat": [
-      "/media/freedb/chair-squat-0.jpg",
-      "/media/freedb/chair-squat-1.jpg"
     ],
     "one-arm-db-row": [
       "/media/freedb/one-arm-db-row-0.jpg",

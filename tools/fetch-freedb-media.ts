@@ -30,6 +30,11 @@ const dryRun = process.argv.includes("--dry-run");
  * 只映射**动作形态真的对得上**的：宁可没有图，也不要拿相似但不同的动作冒充。
  * 明确不映射的：鸟狗式、原地快走、站姿活动度、靠墙俯卧撑、跪姿绳索下拉
  *   —— free-exercise-db 里没有可信对应，这几项继续用文字版式（见 docs/ui-review/2026-11-11-fixes）。
+ * 2026-11-11 追加不映射：徒手髋铰链(hip-hinge)、椅子深蹲(chair-squat)。
+ *   这两项原来按名字映射到了 Good_Morning 与 Chair_Squat，但看图才发现形态完全不同：
+ *   Good_Morning 是杠铃负重早安式（肩后架杠铃），Chair_Squat 是 Smith 机负重蹲，
+ *   而我们的 hip-hinge 是自重髋铰链、chair-squat 是"坐向椅面再站起"的徒手动作。
+ *   按名字对不上就当没有图——不然用户会在"徒手髋铰链"这一页看到一个扛杠铃的男人。
  */
 const MAP: Record<string, string> = {
   "bodyweight-squat": "Bodyweight_Squat",
@@ -38,9 +43,7 @@ const MAP: Record<string, string> = {
   "dead-bug": "Dead_Bug",
   "glute-bridge": "Butt_Lift_Bridge",
   "reverse-lunge": "Crossover_Reverse_Lunge",
-  "hip-hinge": "Good_Morning",
   "calf-raise": "Calf_Raises_-_With_Bands",
-  "chair-squat": "Chair_Squat",
   "one-arm-db-row": "One-Arm_Dumbbell_Row",
   "dumbbell-curl": "Dumbbell_Bicep_Curl",
   "barbell-bench-press": "Barbell_Bench_Press_-_Medium_Grip",

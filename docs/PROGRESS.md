@@ -482,3 +482,25 @@
 **验证**：`npm test` **377 项 / 376 过 / 1 skip / 0 败**；课程页与档案页逐屏重截（390×844）确认无横向溢出、下一场按钮可点（`#start-program`）。
 
 **仍未做**：社区页（用户已说"很重要，先不实现但要讨论"）、训练屏还沿用旧版式。
+
+## 二十九、动作照片映射纠错 + 计划页封面改版（2026-11-11）
+
+**问题（截图发现，不是读代码发现的）**：训练计划页整页铺满一张照片——一个陌生男人在做绳索弯举，和教练"林澄"不是同一个人，而本场根本没有这个动作（本场是 `hip-hinge` + `march-in-place`）。
+
+**两个独立成因，都得改**：
+
+1. **版式**：`public/visual-design.js:151` `const coverImage = visualImage(workout.exercises[0]);` 拿"第一个动作的照片"当整页封面大图。封面这一块给出的信息（一个动作的静帧）与页面主题（今天要练什么）无关，真正的信息在下面的动作列表里。改为封面**只放标题和数字**，动作照片只出现在它自己那一行的小图上（`.visual-plan-cover` 改 `position:static; height:auto`，删掉 `::after` 渐变遮罩）。
+2. **映射本身是错的**：`tools/fetch-freedb-media.ts` 第 41 行 `"hip-hinge": "Good_Morning"`、`"chair-squat": "Chair_Squat"`。按名字对得上，**看图完全不是一回事**：
+   - `Good_Morning` = 杠铃负重早安式（肩后架杠铃，`equipment: barbell`），我们的 `hip-hinge`（src/core.ts:135 徒手髋铰链）是自重动作，instructions 是"双脚站稳，髋部向后移动"。
+   - `Chair_Squat` = Smith 机负重蹲（`equipment: machine`，267x400），我们的 `chair-squat`（src/core.ts:138）是"在稳固椅子前站稳，缓慢坐向椅面后站起"的徒手动作。
+   - 上游核实过：`Chair_Squat` 的 instructions 开头就是 "first set the bar to a position that best matches your height"——是杠铃架上的动作，不是椅子。这个名字有误导性。
+
+**处理**：两处从映射表删除，按仓库既定口径（宁可没图，也不要相似但不同的动作冒充）改为不映射，走文字版式。删掉 `public/media/freedb/` 下这 6 个失效帧（hip-hinge-0/1、chair-squat-0/1、kneeling-cable-pulldown-0/1——最后这项是更早就不映射后残留的）。`knowledge/freedb-map.json` 重新生成：**16 个动作 / 32 帧**，且校验过没有悬空引用。
+
+**其余 16 个逐一核对过**（PIL 拼双帧联系表逐张看）：barbell-bench-press、bodyweight-squat、cable-fly、calf-raise、dead-bug、dumbbell-curl、face-pull、glute-bridge、incline-db-press、lat-pulldown-ex、one-arm-db-row、plank、push-up、reverse-lunge、seated-cable-row、triceps-pushdown 全部形态一致，保留。文件 md5 全部唯一，无重复文件。
+
+**验证**：`npm test` **377 项 / 376 过 / 1 skip / 0 败**；`knowledge/freedb-map.json` 逐条 `fs.existsSync` 校验 0 缺失；计划页重截（/tmp/tm-shots/train-plan2.png）确认封面不再铺无关照片、动作行图标正常。
+
+**教训**：按**名字**映射动作图是不可靠的——`Chair_Squat` 这种同名条目形态可以完全不同。以后加映射必须**看图**，不能看 id。
+
+**仍未做**：社区页、训练屏（组内/休息/完成）还沿用旧版式；`docs/ui-review/approved-integration/` 仍是来源不明的未跟踪目录。
