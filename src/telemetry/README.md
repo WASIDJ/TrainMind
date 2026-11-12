@@ -1,6 +1,6 @@
 # TrainMind Telemetry v2(冻结规格 v1.0.1 实现)
 
-> 规格书:`../../trainmind-setrecord-v2-schema.md`(v1.0.1,已冻结)
+> 规格书:`trainmind-setrecord-v2-schema.md` v1.0.1(已冻结,在仓库外)
 > 范围围栏(规格 §0):本模块只实现 schema / migration / TelemetryRecorder / seq 分配器 /
 > episode 计算 / summary 派生 / 单元测试 / golden test。
 > **不做:UI、真实语音引擎接入、上传/同步、下一 Phase。**

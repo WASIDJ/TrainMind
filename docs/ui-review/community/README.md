@@ -16,4 +16,4 @@
 
 最终全量测试 `npm test` 连续两次均 351 项 / 350 过 / 1 skip / 0 败；独立社区专项 8 项。截图均已打开检查，无横向溢出，短屏可滚动，五项底部导航可见。真机未验证。
 
-详见[实施范围与限制](../../COMMUNITY-IMPLEMENTATION.md)。
+详见[实施范围与限制](../COMMUNITY-IMPLEMENTATION.md)。

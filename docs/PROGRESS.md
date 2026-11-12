@@ -27,9 +27,7 @@
 - **UI 设计规范 v1.0（给设计/AI 的唯一事实来源）**：[UI-SPEC.md](UI-SPEC.md)
 - 智能度评估与优化路线（教到现在多聪明、下一步怎么更聪明）：[AI-COACH-INTELLIGENCE.md](AI-COACH-INTELLIGENCE.md)
 - **存量缺陷清单（M/N 重做审计，46 条，按批执行）**：[AUDIT-BACKLOG.md](AUDIT-BACKLOG.md)
-- 组内听觉感知设计：[../../trainmind-组内听觉感知设计.md](../../trainmind-组内听觉感知设计.md)
-- 产品级裁决（D14/D16-B/D17…）：[../../TrainMind-智能性重设计提案.md](../../TrainMind-智能性重设计提案.md)
-- 竞品/开源对照：`../../reverse-lab/`（含 workout.cool、Duolingo）
+- 产品级裁决（D14/D16-B/D17…）：`../TrainMind-智能性重设计提案.md`（在仓库外，不进本仓库）
 
 ## 三、已经能跑的闭环
 
@@ -124,7 +122,7 @@
 
 **问题**：两条生成计划的路在互相打架。首页并列「生成今日计划」和「和教练聊聊」；「计划」tab 里有第三个会回环到首页的「单场训练」；教练对话聊完不产出任何计划；课程只有数字没有打卡动作。
 
-**依据**：`reverse-lab/duolingo-工作笔记.md` §一——多邻国永远只给"下一个下一步"，复习/错题/跳级都不是并列入口（`PATH_LEVEL_SESSION_END_INFO`）；§四明确断签惩罚我们不抄。
+**依据**：章节结构参照结论——永远只给"下一个下一步"，复习/错题/跳级都不是并列入口；断签惩罚我们不抄。
 
 **改动**：
 
@@ -268,13 +266,13 @@
 
 ## 十七、课程关卡地图（2026-11-10）
 
-按用户反馈，把课程页的逐行场次改为 Duolingo 式空间路径：左右蜿蜒的 SVG 路线、立体关卡、当前关卡提示、周区域与终点。已完成显示日期，当前关卡直接进入既有开练接口，未来关卡显示锁定；保留真实课程进度与打卡日历。
+按用户反馈，把课程页的逐行场次改为空间路径：左右蜿蜒的 SVG 路线、立体关卡、当前关卡提示、周区域与终点。已完成显示日期，当前关卡直接进入既有开练接口，未来关卡显示锁定；保留真实课程进度与打卡日历。
 
 验证：隔离临时库 + 无头 Chrome，390×844、320×568、1280×900 均无横向溢出；12 个节点、唯一可开始关卡；真实点击进入 6 动作计划；6/12 与 12/12 状态正确。截图见 [课程地图](ui-review/course-map/README.md)。`npm test` 连跑两次均 **341 项 / 340 过 / 1 skip / 0 败**。未进行真机验收。
 
 ## 十八、社区关系与机制研究（2026-11-10，D32 / D32-R）
 
-[社区方案 v0.3](COMMUNITY-PRD.md) 已依据用户“以稳定朋友关系建立留存壁垒”的方向修订，并新增[机制研究](COMMUNITY-MECHANISMS-RESEARCH.md)。核对 TikTok、Snapchat、Duolingo、Strava、Nike 与 Apple 的一手公开规则；未把国内产品二手攻略当官方现行表。
+[社区方案 v0.3](COMMUNITY-PRD.md) 已依据用户“以稳定朋友关系建立留存壁垒”的方向修订，并新增[机制研究](COMMUNITY-MECHANISMS-RESEARCH.md)。核对 TikTok、Snapchat、Strava、Nike 与 Apple 的一手公开规则；未把国内产品二手攻略当官方现行表。
 
 建议累计身份与练友火花分开：3/7/14/30/90/180/365 累计日等级；7 完整无训练日转暂歇；双人一周内 3 个共同活跃日起火，2/3 完整空缺日变淡/熄灭，48 小时可双向按月限次免费恢复。首版固定小圈和共同周目标前置；第 7 日少量联系、14 日约练需与旧方案比较。**全部为待验证设计，未实现社区功能**。文档已核对链接、日期边界和跨章节口径；本轮无代码变更，未跑无关回归，既有 341/340/1/0 仍属本日地图验证。
 
@@ -569,3 +567,14 @@
 - 背景照压暗不够（`brightness(.66)`）时，人物的脸会从白色数字后面透出来，观感很脏。
 
 **验证**：`npm test` **377 项 / 376 过 / 1 skip / 0 败**；390×844 与 320×568 休息屏实截（`/tmp/tm-restshot.mjs`，参数 `<W> <H> <tag>`，直接在页面里把 workout 置为 `status:'resting'` 再调 `resting()`，因为演示课只有 1 组进不了休息屏）；全流程六屏回归（`/tmp/tm-final.mjs`）home / courses / plan / set / timed / done 横向溢出除首页建议气泡横滑（预期）外全部为空。
+
+## 三十三、推 GitHub 前的去敏（2026-11-12）
+
+为把仓库交给同事协作，把"数据怎么拿到"的过程从入库文件里摘掉，只留结论与判断：
+
+- 第三方产品的**公开**文章与官方帮助链接照留（`docs/COMMUNITY-MECHANISMS-RESEARCH.md` 的 Duolingo 博客、Strava 社区页等），属于可引用的行业资料。
+- 摘掉的是：`docs/journal/2026-11-06.md` 里下载途径/解包工具/包体积与版本号、`docs/UI-SPEC.md` §3 与 §4.4 的产品名与笔记路径、`src/telemetry/types.ts` 与 `public/index.html` 的注释、`docs/PROGRESS.md` 与各 journal 指向 `reverse-lab/` 的路径、`PHASE7B_TEST_PROTOCOL.md`、`AGENTS.md` 留档规则第 4 条（改为"竞品/开源对照写在仓库之外"）。
+- 指向仓库外私有文档的引用改成纯文本并注明"在仓库外"，不做相对链接。
+- 修 `docs/ui-review/community/README.md:19` 指向 `../../COMMUNITY-IMPLEMENTATION.md` 的断链 → `../COMMUNITY-IMPLEMENTATION.md`。
+- 已知限制：只改了工作区，**历史提交里仍是旧文字**；是否需要 `git filter-repo` 重写历史由 owner 决定。
+- 验证：`npm test` 377 项 / 376 过 / 1 skip / 0 败。

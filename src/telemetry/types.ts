@@ -24,7 +24,7 @@ export interface WorkoutSession {
 }
 
 // ============ ExerciseInstance ============
-// tracking_metric 参考 SwipeHealth 逆向:reps(计数)| hold(保持)| time(计时)
+// tracking_metric 三种计数口径:reps(计数)| hold(保持)| time(计时)
 export type TrackingMetric = 'reps' | 'hold' | 'time';
 export type ExerciseInstanceStatus =
   | 'pending' | 'in_progress' | 'completed'
@@ -40,7 +40,7 @@ export interface ExerciseInstance {
   substitutedByInstanceId: Ulid | null; // 被替换时指向替代实例
 }
 
-// ============ SetRecord(事实层;字段名对齐 SwipeHealth 已验证基线)============
+// ============ SetRecord(事实层)============
 export type SetRecordStatus = 'completed' | 'partial' | 'failed' | 'skipped';
 
 export interface SetRecord {

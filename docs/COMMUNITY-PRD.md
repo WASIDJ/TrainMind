@@ -3,7 +3,7 @@
 版本：v0.3 同路人、关注与运动生活理念补充稿
 日期：2026-11-10
 状态：产品方向来自用户；公开图文、关注与主动摘要推荐已完成首批本地实现，详见[实施范围](COMMUNITY-IMPLEMENTATION.md)。完整等级、火花、约练及其他实验参数仍属待验证方案。
-关联：[现状](PROGRESS.md)、[界面规范](UI-SPEC.md)、[产品决策 D32](../../TrainMind-智能性重设计提案.md)、[竞品研究与证据](COMMUNITY-MECHANISMS-RESEARCH.md)、[同路人与关注设计](COMMUNITY-PATHMATES-AND-CREATORS.md)
+关联：[现状](PROGRESS.md)、[界面规范](UI-SPEC.md)、产品决策 D32（仓库外提案文档）、[竞品研究与证据](COMMUNITY-MECHANISMS-RESEARCH.md)、[同路人与关注设计](COMMUNITY-PATHMATES-AND-CREATORS.md)
 
 > 本版取代 v0.1 的“历史最高连续天数决定等级”和“必须等到第 14 天才开始结识陌生练友”建议。保留按坚持建立身份、等级带来社区与消费权益的方向；将等级、近期运动状态、人与人的火花分开，优先帮助新用户在第一周遇到愿意持续来往的人。
 

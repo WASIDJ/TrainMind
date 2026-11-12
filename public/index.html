@@ -834,8 +834,8 @@ async function loadProgram(){
     };
   }catch(e){host.innerHTML='<div class="error">'+esc(e.message)+'</div>'}
 }
-// 打卡日历(owner 2026-11-09 要求,参照多邻国"路径+完成格子"):只用真实完成的场次点灯。
-// 明确不抄断签惩罚(streak freeze/repair,见 reverse-lab/duolingo 工作笔记 §四)——
+// 打卡日历(owner 2026-11-09 要求,参照"路径+完成格子"):只用真实完成的场次点灯。
+// 明确不抄断签惩罚(streak freeze/repair)——
 // 断了就从今天重新开始,不给压力。
 const dayKey=t=>{const d=new Date(t);return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()};
 async function renderCheckin(){
@@ -1175,7 +1175,7 @@ function intentHome(intent=false){
   }
   for(const [id,step] of [['duration-minus',-5],['duration-plus',5]])document.querySelector('#'+id).onclick=()=>{const minutes=Math.max(5,Math.min(120,Number(input.value.match(/(\d+)\s*分钟/)?.[1]??30)+step));input.value=/\d+\s*分钟/.test(input.value)?input.value.replace(/\d+\s*分钟/,minutes+'分钟'):minutes+'分钟，'+input.value;updateInput()};
   if(intent===true)showIntent();else applyHomeCta();
-// 多邻国原则(2026-11-09 逆向笔记 §一):一屏只有一个主 CTA —— 有课程就"继续下一场",
+// 一屏只有一个主 CTA —— 有课程就"继续下一场",
 // 没有课程才"排今天的训练";第二条路降级成一行文字,不再和主按钮并列抢注意力。
 async function applyHomeCta(){
   const btn=document.querySelector('#generate-plan'),hero=document.querySelector('.session-hero');

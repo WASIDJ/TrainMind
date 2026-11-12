@@ -1,5 +1,5 @@
 // 教练人格层 v1(D11,Bloom 移植)单元测试:槽位映射 / 输出守卫 / 红旗 / 记忆 / 回退矩阵
-// 设计文档:../../trainmind-教练人格层设计.md
+// 设计文档:trainmind-教练人格层设计.md(在仓库外)
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
