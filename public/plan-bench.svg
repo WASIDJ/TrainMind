@@ -1,8 +1,1 @@
-<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="56" height="60" viewBox="0 0 56 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g id="exercise/1/illustration">
-<g id="Group">
-<path id="Vector" d="M6.53333 16H49.4667M8.4 12V20M13.0667 10V22M42.9333 10V22M47.6 12V20M18.6667 46H40.1333M25.2 35L29.8667 42L37.3333 38M19.6 31L27.0667 22M27.0667 22L38.2667 31L42.9333 19M27.0667 22V16" stroke="#183743" stroke-width="3" stroke-linecap="round"/>
-</g>
-<path id="Vector_2" d="M25.2 34C27.7773 34 29.8667 31.7614 29.8667 29C29.8667 26.2386 27.7773 24 25.2 24C22.6227 24 20.5333 26.2386 20.5333 29C20.5333 31.7614 22.6227 34 25.2 34Z" fill="#21D9AB"/>
-</g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="56" height="60" fill="none" overflow="visible" preserveAspectRatio="none" style="display:block" viewBox="0 0 56 60"><g id="exercise/1/illustration"><g id="Group"><path id="Vector" stroke="#183743" stroke-linecap="round" stroke-width="3" d="M6.53333 16H49.4667M8.4 12V20M13.0667 10V22M42.9333 10V22M47.6 12V20M18.6667 46H40.1333M25.2 35L29.8667 42L37.3333 38M19.6 31L27.0667 22M27.0667 22L38.2667 31L42.9333 19M27.0667 22V16"/></g><path id="Vector_2" fill="#21D9AB" d="M25.2 34C27.7773 34 29.8667 31.7614 29.8667 29C29.8667 26.2386 27.7773 24 25.2 24C22.6227 24 20.5333 26.2386 20.5333 29C20.5333 31.7614 22.6227 34 25.2 34Z"/></g></svg>
