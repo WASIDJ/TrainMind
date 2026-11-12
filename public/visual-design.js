@@ -213,6 +213,15 @@
         photo.alt = '';
         next.prepend(photo);
       }
+      // 2026-11-12：休息屏改成"照片当背景 + 白色大数字"（用户挑的版式）。
+      // 这里给整屏补一层背景照——照片只作氛围，压暗到不抢数字。
+      if (!root.querySelector(':scope > .rest-photo')) {
+        const background = document.createElement('div');
+        background.className = 'rest-photo';
+        background.style.backgroundImage = `url("${image}")`;
+        background.setAttribute('aria-hidden', 'true');
+        root.prepend(background);
+      }
     }
   }
 

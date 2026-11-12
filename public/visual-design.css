@@ -617,82 +617,85 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
   padding:0 17px 145px;
 }
 
-/* 休息屏（2026-11-11 重做）：原来 .rest-card / .tm-ring / .rest-actions / .coach-card
-   四块各自 absolute（top:116px / bottom:224px / bottom:189px / bottom:118px），390×844 上
-   倒计时被教练卡压住、标题和"已完成 1/1 组"叠字、中间空出 300px。
-   改成竖排流式：这一屏的主角只有一个——倒计时；其余按"接下来练什么 → 能怎么操作 → 教练说"
-   往下排。同屏还带着 .visual-session.visual-text-first，所以选择器要写到同权重以上。 */
+/* 休息屏（2026-11-12 再重做一次）：上一版是荧光黄圆环套着 00:59，环抢走了全部注意力，
+   数字只是环里的装饰。用户挑了 docs/ui-options/ladder/v2-rest 的版式：
+   照片当背景 → REST / 休息 小标 → 白色大数字 → 「＋15 秒」胶囊 → 教练一句话 → 底部托盘。
+   数字重新是这一屏唯一的主角，环整套删掉。 */
 .resting-screen.visual-session {
-  display:flex; flex-direction:column; justify-content:center; gap:15px;
-  padding:78px 17px 150px; overflow-y:auto;
+  display:flex; flex-direction:column; justify-content:center; gap:16px;
+  padding:86px 17px 150px; overflow-y:auto;
+  background:radial-gradient(120% 90% at 60% 8%,#2b2333 0%,#17131d 55%,#0d0a11 100%);
 }
-/* justify-content:center 在内容高于容器时会让顶部溢出到负坐标（倒计时环曾整块压到进度条上）。
-   safe center：放得下就居中，放不下就退回从顶开始。 */
+/* justify-content:center 在内容高于容器时会让顶部溢出到负坐标。safe center：
+   放得下就居中，放不下就退回从顶开始。 */
 .resting-screen.visual-session { justify-content:safe center; }
 .resting-screen.visual-session>.visual-session-progress { position:absolute; top:16px; left:17px; right:17px; }
-.resting-screen.visual-session .workout-head,
-.resting-screen.visual-session .rest-console,
+/* 背景照：只做氛围。z-index:-1 落在 section 的渐变背景之上、内容之下
+   （和 .visual-text-first::before 同一个道理）。压暗 + 模糊，否则人的腿会从
+   白色数字后面透出来，反而看不清还剩几秒。 */
+.resting-screen.visual-session>.rest-photo {
+  position:absolute; inset:0; z-index:-1; pointer-events:none;
+  background-size:cover; background-position:center 34%;
+  filter:blur(7px) brightness(.5) saturate(.8);
+}
+/* 中心压暗一圈，让白数字落在干净的地上；四周留一点人形，别把照片糊成一团黑。 */
+.resting-screen.visual-session::after {
+  content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
+  background:radial-gradient(72% 34% at 50% 46%,#0a0710c4 0%,#0a0710a6 60%,#0a071000 100%),
+             linear-gradient(#0a071033,#0a071099 60%,#0a0710e8);
+}
 .resting-screen.visual-session .rest-card,
-.resting-screen.visual-session .rest-actions,
+.resting-screen.visual-session .rest-focus,
 .resting-screen.visual-session .agency-card,
 .resting-screen.visual-session .coach-card,
 .resting-screen.visual-session .training-voice-tools {
   position:static; left:auto; right:auto; top:auto; bottom:auto; width:auto; max-width:none; margin:0;
 }
-.resting-screen.visual-session .workout-head { order:1; text-align:center; padding:0; }
-.resting-screen.visual-session .workout-head .eyebrow { justify-content:center; }
-.resting-screen.visual-session .workout-head h1 { font-size:17px; line-height:1.2; margin:5px 0 3px; letter-spacing:-.02em; }
-.resting-screen.visual-session .workout-head small { font-size:11px; color:#8d8099; }
-/* 倒计时：75px 数字 + 一圈进度环，占满这一屏的主角位 */
-/* .workout-console 是 display:contents —— 它自己没有盒子，order 加在它身上不生效，
-   必须直接加在 .tm-ring 上，否则倒计时环会掉到整屏最顶上压住进度条。 */
-.resting-screen.visual-session .rest-console .tm-ring {
-  /* position:relative 而不是 static —— 环里的 <svg> 是 absolute inset:0，
-     环一旦变成 static，那块 svg 就相对整屏定位，撑成 390×844 的巨环罩住下面所有内容。
-     left/right/top/bottom 必须显式 auto，否则继承来的旧 absolute 偏移（bottom:224px）
-     在 relative 下会真的把环往上顶 224px。 */
-  order:2; position:relative; left:auto; right:auto; top:auto; bottom:auto;
-  /* !important：.tm-ring 在别处有 `width:clamp(164px,49vw,218px)` 一类按视口的尺寸，
-     这小屏上会撑成一个 380px 的大环，把"下一组"和教练卡整个罩住。 */
-  width:168px!important; height:168px!important; aspect-ratio:1; margin:0 auto;
-  display:grid; place-items:center; background:none; border:0;
-}
-.resting-screen.visual-session .rest-console .tm-ring>svg { display:block; position:absolute; inset:0; width:100%; height:100%; }
-.resting-screen.visual-session .rest-console .tm-ring circle:first-child { stroke:#2b2433; }
-.resting-screen.visual-session .rest-console .tm-ring .ring-arc { stroke:#e6ff00; }
-.resting-screen.visual-session .rest-console .tm-ring-copy { position:relative; text-align:center; display:block; }
-.resting-screen.visual-session .rest-console .tm-ring-copy small { white-space:nowrap; }
-.resting-screen.visual-session .rest-console .tm-ring strong {
-  font-size:60px; line-height:1; color:#fff; letter-spacing:-.045em; font-variant-numeric:tabular-nums;
-}
-.resting-screen.visual-session .rest-console .tm-ring small { display:block; font-size:11px; color:#8d8099; margin:7px 0 0; max-width:none; }
-/* 下一组：唯一一张"接下来做什么"的卡 */
+/* 「下一组」压成顶部一条窄带：休息时它只是"接下来做什么"的备忘，不是主角。 */
 .resting-screen.visual-session .rest-card {
-  order:3; position:relative; padding:12px 14px; border-radius:14px;
-  background:#241f2b; border:1px solid #3a3243;
+  order:1; position:relative; padding:11px 14px 11px 58px; border-radius:13px;
+  background:#241f2bb0; border:1px solid #403748;
 }
-.resting-screen.visual-session .rest-card:has(img) { padding-left:60px; min-height:60px; }
-.resting-screen.visual-session .rest-card>img { position:absolute; left:10px; top:11px; width:38px; height:38px; border-radius:8px; object-fit:cover; }
-.resting-screen.visual-session .rest-card strong { display:block; font-size:14px; font-weight:600; color:#f2ecf6; }
-.resting-screen.visual-session .rest-card p { font-size:11px; color:#8d8099; margin:4px 0 0; }
+.resting-screen.visual-session .rest-card>img { position:absolute; left:10px; top:10px; width:36px; height:36px; border-radius:8px; object-fit:cover; }
+.resting-screen.visual-session .rest-card strong { display:block; font-size:13px; font-weight:600; color:#e9e2ef; }
+.resting-screen.visual-session .rest-card p { font-size:10.5px; color:#a195ad; margin:3px 0 0; }
+/* 主角：REST / 休息 + 白色大数字 + 胶囊按钮，整块竖直居中占住中间 */
+.resting-screen.visual-session .rest-focus {
+  order:2; display:grid; justify-items:center; gap:0;
+  padding:8px 0 4px; text-align:center;
+}
+.resting-screen.visual-session .rest-focus-label {
+  font:900 17px/1.1 Arial,"PingFang SC",sans-serif; letter-spacing:.02em;
+  color:#fff; margin:0 0 6px;
+}
+.resting-screen.visual-session .rest-focus>strong {
+  display:block; color:#fff; font:850 74px/1 Arial,"Helvetica Neue",sans-serif;
+  letter-spacing:-.06em; font-variant-numeric:tabular-nums;
+  text-shadow:0 2px 24px #000000a6;
+}
+.resting-screen.visual-session .rest-actions {
+  order:3; display:flex; justify-content:center; gap:8px; margin:16px 0 0; flex-wrap:wrap;
+}
+.resting-screen.visual-session .rest-actions button {
+  min-height:38px; padding:0 15px; font-size:11.5px; border-radius:999px;
+  background:#3b334254; border:1px solid #aaa0b3; color:#e9e2ef; font-weight:400;
+}
+.resting-screen.visual-session .rest-actions button:active { background:#4a4159; }
 .resting-screen.visual-session .agency-card { order:4; border-radius:14px!important; }
 .resting-screen.visual-session .agency-card>div { flex-direction:column!important; gap:7px!important; }
 .resting-screen.visual-session .agency-card button { min-height:42px; font-size:12px; }
-.resting-screen.visual-session .rest-actions { order:5; justify-content:center; gap:7px; }
-.resting-screen.visual-session .rest-actions button { min-height:40px; padding:8px 14px; font-size:12px; background:#241f2b; border:1px solid #3a3243; color:#cdc0d6; }
-.resting-screen.visual-session .coach-card { order:6; }
-.resting-screen.visual-session .training-voice-tools { order:7; }
+.resting-screen.visual-session .coach-card { order:5; }
+.resting-screen.visual-session .training-voice-tools { order:6; }
 .resting-screen.visual-session .training-voice-tools>summary { justify-content:flex-start; font-size:11px; color:#8d8099; }
 .resting-screen.visual-session .training-voice-tools[open] { background:#241f2b; border:1px solid #3a3243; border-radius:14px; padding:12px; }
-/* 动作要点与照片参考留给真正开始那一组的屏幕：休息的 60 秒里只有倒计时该被盯着。
-   照片参考卡（.visual-photo-reference）本来是训练屏的组件，休息屏上会撑高整页。 */
+/* 动作要点与照片参考留给真正开始那一组的屏幕：休息的这几十秒里只有倒计时该被盯着。 */
 .resting-screen.visual-session .visual-cues,
 .resting-screen.visual-session .visual-photo-reference { display:none; }
-/* 小屏（320×568、iPhone SE 一代）上休息屏内容会超出，整屏滚动可看，倒计时环缩一档。 */
+/* 小屏（320×568、iPhone SE 一代）上休息屏内容会超出，整屏滚动可看，数字缩一档。 */
 @media (max-height:700px) {
-  .resting-screen.visual-session { padding:64px 17px 130px; gap:12px; }
-  .resting-screen.visual-session .rest-console .tm-ring { width:132px!important; height:132px!important; }
-  .resting-screen.visual-session .rest-console .tm-ring strong { font-size:46px; }
+  .resting-screen.visual-session { padding:70px 17px 132px; gap:13px; }
+  .resting-screen.visual-session .rest-focus>strong { font-size:56px; }
+  .resting-screen.visual-session .rest-focus-label { font-size:14px; }
 }
 /* 热身 / 放松（timedPhase）：原来是 hero 贴顶 + 倒计时 absolute 钉在右下角，
    中间 600px 全空，时间还飘在屏幕角落。改成竖排：标题在上、倒计时在中间当主角、
@@ -711,9 +714,15 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
 
 .visual-timed-screen .timer {
   position:static; order:2; margin:auto 0; align-self:center;
-  display:flex; align-items:baseline; justify-content:center; gap:6px;
+  display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:6px;
   font-size:86px; font-weight:800; letter-spacing:-.04em; line-height:1;
   font-variant-numeric:tabular-nums;
+}
+/* 和休息屏同一套：上面一行小标（WARM UP / 热身），中间一个字最大的数字。 */
+.visual-timed-screen .timer .timer-label {
+  flex:0 0 100%; margin:0 0 10px; text-align:center;
+  font:900 17px/1.1 Arial,"PingFang SC",sans-serif; letter-spacing:.02em;
+  color:var(--ink);
 }
 .visual-timed-screen .timer span, .visual-timed-screen .timer #seconds { color:var(--ink); }
 .visual-timed-screen .timer small { font-size:20px!important; font-weight:600; color:var(--muted); }
@@ -738,6 +747,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
 @media (max-height:700px) {
   .visual-timed-screen.visual-session { padding:60px 17px 130px; gap:10px; }
   .visual-timed-screen .timer { font-size:64px; }
+  .visual-timed-screen .timer .timer-label { font-size:14px; }
 }
 /* 完成屏底部原来三个整宽按钮竖排吃掉 180px，还把"记录本次训练感受"那栏压在底下。
    两个次要操作并排一行，主操作（回首页）独占一行。 */

@@ -551,3 +551,21 @@
 **仍未做**：社区的**定位**问题（用户说过"社区很重要，先不实现但要和我讨论"）还需要一次对话：概念片里的社区是"已经有朋友在陪"还是"未来愿景"，决定这一页该多热闹、要不要做假数据。当前版本按"真实但冷清"呈现，`/people` 只在发现流底部出现"也许，你会想认识"。
 
 **补充（2026-11-11，用户确认口径）**：社区按"真实但冷清"呈现，不造演示数据。加了一行 `p.community-vision`（"这里刚开张，你现在读的是最早的一批记录。真人的分享会一天天多起来。"）。冷清本身不是问题，没交代才是——否则打开看到两三条会被读成"没人用"。文案只描述事实，不宣称没发生的事。
+
+## 三十二、休息屏倒计时改回"数字当主角"（2026-11-12）
+
+**起因**：用户回看训练屏时说"倒计时我倾向于原来那样的设计比较好看"，随后发来截图（黑底训练照 + 白色特大 `01:00` + 上方 `REST / 休息` + 下方「＋ 15 秒」胶囊）并说"这样"。核实后确认那是 `docs/ui-options/ladder/` 里的设计原型（`immersive-views.js` 的 `rest(ui)` + `immersive.css:140-146` 的 `.rest-focus`），不是 git 历史里的旧版实现——查 git log 查不到，翻 `docs/ui-options/` 才找到。
+
+**问题**：上一轮把休息屏改成竖排流式后，用了一个 168px 的荧光黄圆环套 `00:59`。环的视觉权重远大于环里的字，这一屏的主角变成了环，而用户真正需要一眼看清的是"还剩几秒"。
+
+**改法**：
+1. `resting()` 重写：删掉 `<header class="workout-head">`（"组间休息"大标题）与整块 `.rest-console .tm-ring`（含 `<svg>` 圆环）及每帧的 `setRingProgress` 调用。结构变成「下一组」窄条 → `REST / 休息` 小标 + 白色大数字 + 三个胶囊 → 教练卡 → 语音工具 → 底部托盘。
+2. 大数字 74px / `font-variant-numeric:tabular-nums` / `letter-spacing:-.06em`，小屏（`max-height:700px`）56px、小标 14px。
+3. `decorateSession()` 在休息屏 prepend 一层 `.rest-photo`（`aria-hidden`，`background-image` = 当前动作照片），配合 `.resting-screen.visual-session::after` 的径向 + 线性双向渐变压暗（`blur(7px) brightness(.5) saturate(.8)`），照片只做氛围、不抢数字。
+4. 热身 / 放松屏（`timedPhase`）补同一套小标 `.timer-label`（`WARM UP / 热身`、`COOL DOWN / 放松`），并删掉 hero 里与 h1 重复的 eyebrow。
+
+**踩坑**：
+- `.rest-focus` 加 `margin:auto 0` 想"把数字推到中间"，会把 flex 剩余空间全吞掉，上下各裂一片空白；容器上用 `justify-content:safe center` 才对。
+- 背景照压暗不够（`brightness(.66)`）时，人物的脸会从白色数字后面透出来，观感很脏。
+
+**验证**：`npm test` **377 项 / 376 过 / 1 skip / 0 败**；390×844 与 320×568 休息屏实截（`/tmp/tm-restshot.mjs`，参数 `<W> <H> <tag>`，直接在页面里把 workout 置为 `status:'resting'` 再调 `resting()`，因为演示课只有 1 组进不了休息屏）；全流程六屏回归（`/tmp/tm-final.mjs`）home / courses / plan / set / timed / done 横向溢出除首页建议气泡横滑（预期）外全部为空。
