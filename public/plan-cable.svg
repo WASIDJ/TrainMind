@@ -1,8 +1,1 @@
-<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="56" height="60" viewBox="0 0 56 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g id="exercise/3/illustration">
-<g id="Group">
-<path id="Vector" d="M11.2 8V53H44.8V8M7.46667 11H48.5333M14 44H42M20.5333 23L29.8667 35L37.3333 23M17.7333 21L13.0667 30M42 21L46.6667 30" stroke="#183743" stroke-width="3" stroke-linecap="round"/>
-</g>
-<path id="Vector_2" d="M28 22C30.5773 22 32.6667 19.7614 32.6667 17C32.6667 14.2386 30.5773 12 28 12C25.4227 12 23.3333 14.2386 23.3333 17C23.3333 19.7614 25.4227 22 28 22Z" fill="#21D9AB"/>
-</g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="56" height="60" fill="none" overflow="visible" preserveAspectRatio="none" style="display:block" viewBox="0 0 56 60"><g id="exercise/3/illustration"><g id="Group"><path id="Vector" stroke="#183743" stroke-linecap="round" stroke-width="3" d="M11.2 8V53H44.8V8M7.46667 11H48.5333M14 44H42M20.5333 23L29.8667 35L37.3333 23M17.7333 21L13.0667 30M42 21L46.6667 30"/></g><path id="Vector_2" fill="#21D9AB" d="M28 22C30.5773 22 32.6667 19.7614 32.6667 17C32.6667 14.2386 30.5773 12 28 12C25.4227 12 23.3333 14.2386 23.3333 17C23.3333 19.7614 25.4227 22 28 22Z"/></g></svg>
