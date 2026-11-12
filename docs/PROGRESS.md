@@ -568,12 +568,12 @@
 
 **验证**：`npm test` **377 项 / 376 过 / 1 skip / 0 败**；390×844 与 320×568 休息屏实截（`/tmp/tm-restshot.mjs`，参数 `<W> <H> <tag>`，直接在页面里把 workout 置为 `status:'resting'` 再调 `resting()`，因为演示课只有 1 组进不了休息屏）；全流程六屏回归（`/tmp/tm-final.mjs`）home / courses / plan / set / timed / done 横向溢出除首页建议气泡横滑（预期）外全部为空。
 
-## 三十三、推 GitHub 前的去敏（2026-11-12）
+## 三十三、推 GitHub 前清理非公开资料的获取过程（2026-11-12）
 
 为把仓库交给同事协作，把"数据怎么拿到"的过程从入库文件里摘掉，只留结论与判断：
 
 - 第三方产品的**公开**文章与官方帮助链接照留（`docs/COMMUNITY-MECHANISMS-RESEARCH.md` 的 Duolingo 博客、Strava 社区页等），属于可引用的行业资料。
-- 摘掉的是：`docs/journal/2026-11-06.md` 里下载途径/解包工具/包体积与版本号、`docs/UI-SPEC.md` §3 与 §4.4 的产品名与笔记路径、`src/telemetry/types.ts` 与 `public/index.html` 的注释、`docs/PROGRESS.md` 与各 journal 指向 `reverse-lab/` 的路径、`PHASE7B_TEST_PROTOCOL.md`、`AGENTS.md` 留档规则第 4 条（改为"竞品/开源对照写在仓库之外"）。
+- 摘掉的是：`docs/journal/2026-11-06.md` 里下载途径/解包工具/包体积与版本号、`docs/UI-SPEC.md` §3 与 §4.4 的产品名与笔记路径、`src/telemetry/types.ts` 与 `public/index.html` 的注释、`docs/PROGRESS.md` 与各 journal 指向仓库外对照笔记的路径、`PHASE7B_TEST_PROTOCOL.md`、`AGENTS.md` 留档规则第 4 条（改为"竞品/开源对照写在仓库之外"）。
 - 指向仓库外私有文档的引用改成纯文本并注明"在仓库外"，不做相对链接。
 - 修 `docs/ui-review/community/README.md:19` 指向 `../../COMMUNITY-IMPLEMENTATION.md` 的断链 → `../COMMUNITY-IMPLEMENTATION.md`。
 - 已知限制：只改了工作区，**历史提交里仍是旧文字**；是否需要 `git filter-repo` 重写历史由 owner 决定。
