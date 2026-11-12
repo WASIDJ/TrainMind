@@ -124,3 +124,12 @@
 .community-post>footer { padding:2px 14px 8px; gap:14px; }
 .community-footer-note { display:none; }
 @media(max-width:350px) { .community-heading h1 { font-size:21px; } .community-compose span { display:none; } .community-compose { padding:0 11px; } }
+
+/* 2026-11-11：社区按"真实但冷清"呈现（不造演示数据）。冷清本身不是问题，
+   问题是没交代——打开看到两三条会读成"没人用"。这里把话说在前面：
+   内容少是因为刚开张，而不是没人。文案不宣称任何没发生的事。 */
+.community-vision {
+  margin:0 0 12px; padding:10px 13px;
+  font-size:11.5px; line-height:1.65; color:#cfc3d8;
+  background:#241e2b; border:1px solid #3b3346; border-radius:12px;
+}

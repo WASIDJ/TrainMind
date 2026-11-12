@@ -38,7 +38,7 @@ function communityDialog(root,title,content,wide=false){
 async function communityPage(){
   leaveTrainingView();setNav('community');document.querySelector('.shell').dataset.screen='community';
   app.innerHTML=`<section class="tm-screen community-screen"><header class="community-heading"><div class="community-title"><span class="eyebrow">社区</span><h1>一起，把日子过好。</h1><p>运动、生活，还有同路的朋友。</p></div><div class="community-head-actions"><button id="community-account" class="community-account-button" aria-label="我的社区">${communityIcon('people')}</button><button class="community-compose" id="community-compose" aria-label="发布照片或经历">${communityIcon('plus')}<span>分享</span></button></div></header>
-  <div id="community-membership"></div><nav class="community-tabs" aria-label="社区内容"><button data-community-tab="following">关注</button><button data-community-tab="pathmates">同路人</button><button data-community-tab="discover">发现</button></nav>
+  <p class="community-vision">这里刚开张，你现在读的是最早的一批记录。真人的分享会一天天多起来。</p><div id="community-membership"></div><nav class="community-tabs" aria-label="社区内容"><button data-community-tab="following">关注</button><button data-community-tab="pathmates">同路人</button><button data-community-tab="discover">发现</button></nav>
   <div id="community-topics" class="community-topic-filters"><button data-community-topic="" class="active">全部</button>${communityTopics.map(x=>'<button data-community-topic="'+x+'">'+x+'</button>').join('')}</div>
   <div id="community-status" class="community-status" role="status" aria-live="polite" hidden></div><div id="community-content" aria-live="polite"><div class="community-skeleton">正在看看大家的近况…</div></div></section>`;
   const root=app.firstElementChild;root.communityTopic='';root.communityCursor=null;root.communityVersion=0;
